@@ -9,7 +9,8 @@ export const createDesignation = async (req, res) => {
       return res.status(400).json({ message: "Title is required" });
     }
 
-    const exists = await Designation.findOne({ title });
+    // Check if designation exists for this HR
+    const exists = await Designation.findOne({ title, hrId: req.employee._id });
     if (exists) {
       return res.status(400).json({ message: "Designation already exists" });
     }
@@ -19,6 +20,7 @@ export const createDesignation = async (req, res) => {
       description,
       status,
       createdBy: req.employee._id,
+      hrId: req.employee._id,
     });
 
     res.status(201).json({ message: "Designation created", designation });
@@ -30,7 +32,8 @@ export const createDesignation = async (req, res) => {
 // Get all Designations
 export const getDesignationsWithoutFilters = async (req, res) => {
   try {
-    const designations = await Designation.find().populate(
+    // Filter by HR ID to show only designations created by this HR
+    const designations = await Designation.find({ hrId: req.employee._id }).populate(
       "createdBy",
       "name.first name.last employeeId role"
     );
@@ -53,8 +56,8 @@ export const getDesignations = async (req, res) => {
       createdBy
     } = req.query;
 
-    // Build filter object
-    const filter = {};
+    // Build filter object - always filter by HR ID
+    const filter = { hrId: req.employee._id };
 
     // Search filter (title or description)
     if (search) {
@@ -115,7 +118,10 @@ export const getDesignations = async (req, res) => {
 // Get single Designation
 export const getDesignationById = async (req, res) => {
   try {
-    const designation = await Designation.findById(req.params.id).populate(
+    const designation = await Designation.findOne({ 
+      _id: req.params.id, 
+      hrId: req.employee._id 
+    }).populate(
       "createdBy",
       "name.first name.last employeeId"
     );
@@ -135,8 +141,8 @@ export const updateDesignation = async (req, res) => {
   try {
     const { title, description, status } = req.body;
 
-    const updated = await Designation.findByIdAndUpdate(
-      req.params.id,
+    const updated = await Designation.findOneAndUpdate(
+      { _id: req.params.id, hrId: req.employee._id },
       { title, description, status },
       { new: true }
     );
@@ -154,7 +160,10 @@ export const updateDesignation = async (req, res) => {
 // Delete Designation (HR Only)
 export const deleteDesignation = async (req, res) => {
   try {
-    const deleted = await Designation.findByIdAndDelete(req.params.id);
+    const deleted = await Designation.findOneAndDelete({ 
+      _id: req.params.id, 
+      hrId: req.employee._id 
+    });
 
     if (!deleted) {
       return res.status(404).json({ message: "Designation not found" });

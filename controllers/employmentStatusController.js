@@ -9,7 +9,7 @@ export const createEmploymentStatus = async (req, res) => {
       return res.status(400).json({ message: "Title is required" });
     }
 
-    const exists = await EmploymentStatus.findOne({ title });
+    const exists = await EmploymentStatus.findOne({ title, hrId: req.employee._id });
     if (exists) {
       return res.status(400).json({ message: "Employment status already exists" });
     }
@@ -19,6 +19,7 @@ export const createEmploymentStatus = async (req, res) => {
       description,
       status,
       createdBy: req.employee._id,
+      hrId: req.employee._id,
     });
 
     res.status(201).json({ message: "Employment status created", employmentStatus: empStatus });
@@ -30,7 +31,7 @@ export const createEmploymentStatus = async (req, res) => {
 // Get all Employment Statuses
 export const getEmploymentStatusesWithoutFilters = async (req, res) => {
   try {
-    const statuses = await EmploymentStatus.find().populate(
+    const statuses = await EmploymentStatus.find({ hrId: req.employee._id }).populate(
       "createdBy",
       "name.first name.last employeeId role"
     );
@@ -53,8 +54,8 @@ export const getEmploymentStatuses = async (req, res) => {
       createdBy
     } = req.query;
 
-    // Build filter object
-    const filter = {};
+    // Build filter object - always filter by HR ID
+    const filter = { hrId: req.employee._id };
 
     // Search filter (title or description)
     if (search) {
@@ -115,7 +116,10 @@ export const getEmploymentStatuses = async (req, res) => {
 // Get single Employment Status
 export const getEmploymentStatusById = async (req, res) => {
   try {
-    const status = await EmploymentStatus.findById(req.params.id).populate(
+    const status = await EmploymentStatus.findOne({ 
+      _id: req.params.id, 
+      hrId: req.employee._id 
+    }).populate(
       "createdBy",
       "name.first name.last employeeId"
     );
@@ -135,8 +139,8 @@ export const updateEmploymentStatus = async (req, res) => {
   try {
     const { title, description, status } = req.body;
 
-    const updated = await EmploymentStatus.findByIdAndUpdate(
-      req.params.id,
+    const updated = await EmploymentStatus.findOneAndUpdate(
+      { _id: req.params.id, hrId: req.employee._id },
       { title, description, status },
       { new: true }
     );
@@ -154,7 +158,10 @@ export const updateEmploymentStatus = async (req, res) => {
 // Delete Employment Status (HR Only)
 export const deleteEmploymentStatus = async (req, res) => {
   try {
-    const deleted = await EmploymentStatus.findByIdAndDelete(req.params.id);
+    const deleted = await EmploymentStatus.findOneAndDelete({ 
+      _id: req.params.id, 
+      hrId: req.employee._id 
+    });
 
     if (!deleted) {
       return res.status(404).json({ message: "Employment status not found" });

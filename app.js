@@ -15,6 +15,7 @@ import announcementRoutes from './routes/announcementRoutes.js';
 import eventRoutes from './routes/eventRoutes.js';
 import attendanceRoutes from './routes/attendanceRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
+import enhancedDashboardRoutes from './routes/enhancedDashboardRoutes.js';
 import taskRoutes from './routes/taskRoutes.js';
 import quickStatsRoutes from './routes/quickStatsRoutes.js';
 import assetRoutes from './routes/assetRoutes.js';
@@ -65,6 +66,7 @@ app.use('/api/announcements', announcementRoutes)
 app.use("/api/events", eventRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/enhanced-dashboard", enhancedDashboardRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/quick-stats", quickStatsRoutes);
 app.use("/api/assets", assetRoutes);

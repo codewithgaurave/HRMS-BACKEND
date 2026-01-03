@@ -11,6 +11,412 @@ import Announcement from "../models/Announcement.js";
 
 // Helper Functions
 
+// Get today's attendance statistics for HR
+const getTodayAttendanceStatsForHR = async (today, hrEmployeeIds) => {
+  if (!hrEmployeeIds || hrEmployeeIds.length === 0) {
+    return { present: 0, absent: 0, late: 0, halfDay: 0, totalEmployees: 0 };
+  }
+
+  const totalEmployees = hrEmployeeIds.length;
+  
+  const todayAttendance = await Attendance.aggregate([
+    {
+      $match: {
+        employee: { $in: hrEmployeeIds },
+        date: today
+      }
+    },
+    {
+      $group: {
+        _id: "$status",
+        count: { $sum: 1 }
+      }
+    }
+  ]);
+
+  const stats = {
+    present: 0,
+    absent: 0,
+    late: 0,
+    halfDay: 0,
+    totalEmployees: totalEmployees
+  };
+
+  todayAttendance.forEach(item => {
+    switch(item._id) {
+      case "Present": stats.present = item.count; break;
+      case "Absent": stats.absent = item.count; break;
+      case "Late": stats.late = item.count; break;
+      case "Half Day": stats.halfDay = item.count; break;
+    }
+  });
+
+  // Calculate absent employees (total - present)
+  stats.absent = totalEmployees - (stats.present + stats.late + stats.halfDay);
+
+  return stats;
+};
+
+// Get attendance stats for a period for HR
+const getPeriodAttendanceStatsForHR = async (startDate, endDate, hrEmployeeIds) => {
+  if (!hrEmployeeIds || hrEmployeeIds.length === 0) {
+    return { present: 0, absent: 0, late: 0, halfDay: 0, totalEmployees: 0, totalHours: 0, overtimeHours: 0, avgHoursWorked: 0 };
+  }
+
+  const totalEmployees = hrEmployeeIds.length;
+  
+  const attendanceStats = await Attendance.aggregate([
+    {
+      $match: {
+        employee: { $in: hrEmployeeIds },
+        date: { $gte: startDate, $lte: endDate }
+      }
+    },
+    {
+      $group: {
+        _id: "$status",
+        count: { $sum: 1 },
+        totalHours: { $sum: "$totalWorkHours" },
+        overtimeHours: { $sum: "$overtimeHours" }
+      }
+    }
+  ]);
+
+  const stats = {
+    present: 0,
+    absent: 0,
+    late: 0,
+    halfDay: 0,
+    totalEmployees: totalEmployees,
+    totalHours: 0,
+    overtimeHours: 0,
+    avgHoursWorked: 0
+  };
+
+  let totalRecords = 0;
+  attendanceStats.forEach(item => {
+    totalRecords += item.count;
+    stats.totalHours += item.totalHours || 0;
+    stats.overtimeHours += item.overtimeHours || 0;
+    
+    switch(item._id) {
+      case "Present": stats.present = item.count; break;
+      case "Absent": stats.absent = item.count; break;
+      case "Late": stats.late = item.count; break;
+      case "Half Day": stats.halfDay = item.count; break;
+    }
+  });
+
+  // Calculate average hours worked
+  stats.avgHoursWorked = totalRecords > 0 ? (stats.totalHours / totalRecords).toFixed(1) : 0;
+
+  return stats;
+};
+
+// Get department-wise employee statistics for HR
+const getDepartmentStatsForHR = async (hrId) => {
+  const departmentStats = await Employee.aggregate([
+    {
+      $match: { addedBy: new mongoose.Types.ObjectId(hrId), isActive: true }
+    },
+    {
+      $lookup: {
+        from: "departments",
+        localField: "department",
+        foreignField: "_id",
+        as: "departmentInfo"
+      }
+    },
+    {
+      $unwind: "$departmentInfo"
+    },
+    {
+      $group: {
+        _id: "$departmentInfo.name",
+        employeeCount: { $sum: 1 },
+        avgSalary: { $avg: "$salary" }
+      }
+    },
+    {
+      $project: {
+        department: "$_id",
+        employeeCount: 1,
+        avgSalary: { $round: ["$avgSalary", 2] },
+        _id: 0
+      }
+    },
+    {
+      $sort: { employeeCount: -1 }
+    }
+  ]);
+
+  return departmentStats;
+};
+
+// Get attendance trends for HR employees
+const getAttendanceTrendsForHR = async (hrEmployeeIds) => {
+  if (!hrEmployeeIds || hrEmployeeIds.length === 0) {
+    return [];
+  }
+
+  const last30Days = new Date();
+  last30Days.setDate(last30Days.getDate() - 30);
+
+  return await Attendance.aggregate([
+    {
+      $match: {
+        employee: { $in: hrEmployeeIds },
+        date: { $gte: last30Days }
+      }
+    },
+    {
+      $group: {
+        _id: {
+          date: { $dateToString: { format: "%Y-%m-%d", date: "$date" } }
+        },
+        present: {
+          $sum: { $cond: [{ $in: ["$status", ["Present", "Late", "Half Day"]] }, 1, 0] }
+        },
+        absent: {
+          $sum: { $cond: [{ $eq: ["$status", "Absent"] }, 1, 0] }
+        },
+        late: {
+          $sum: { $cond: [{ $eq: ["$status", "Late"] }, 1, 0] }
+        },
+        total: { $sum: 1 }
+      }
+    },
+    {
+      $project: {
+        date: "$_id.date",
+        present: 1,
+        absent: 1,
+        late: 1,
+        total: 1,
+        _id: 0
+      }
+    },
+    {
+      $sort: { date: 1 }
+    }
+  ]);
+};
+
+// Get leave trends for HR employees
+const getLeaveTrendsForHR = async (hrEmployeeIds) => {
+  if (!hrEmployeeIds || hrEmployeeIds.length === 0) {
+    return [];
+  }
+
+  const last6Months = new Date();
+  last6Months.setMonth(last6Months.getMonth() - 6);
+
+  return await Leave.aggregate([
+    {
+      $match: {
+        employee: { $in: hrEmployeeIds },
+        createdAt: { $gte: last6Months }
+      }
+    },
+    {
+      $group: {
+        _id: {
+          month: { $month: "$createdAt" },
+          year: { $year: "$createdAt" },
+          status: "$status"
+        },
+        count: { $sum: 1 }
+      }
+    },
+    {
+      $group: {
+        _id: {
+          month: "$_id.month",
+          year: "$_id.year"
+        },
+        pending: {
+          $sum: {
+            $cond: [{ $eq: ["$_id.status", "Pending"] }, "$count", 0]
+          }
+        },
+        approved: {
+          $sum: {
+            $cond: [{ $eq: ["$_id.status", "Approved"] }, "$count", 0]
+          }
+        },
+        rejected: {
+          $sum: {
+            $cond: [{ $eq: ["$_id.status", "Rejected"] }, "$count", 0]
+          }
+        },
+        total: { $sum: "$count" }
+      }
+    },
+    {
+      $project: {
+        month: {
+          $let: {
+            vars: {
+              monthsInString: [
+                "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+              ]
+            },
+            in: {
+              $arrayElemAt: [
+                "$$monthsInString",
+                { $subtract: ["$_id.month", 1] }
+              ]
+            }
+          }
+        },
+        year: "$_id.year",
+        pending: 1,
+        approved: 1,
+        rejected: 1,
+        total: 1,
+        approvalRate: {
+          $cond: [
+            { $gt: ["$total", 0] },
+            {
+              $round: [
+                {
+                  $multiply: [
+                    { $divide: ["$approved", "$total"] },
+                    100
+                  ]
+                },
+                1
+              ]
+            },
+            0
+          ]
+        }
+      }
+    },
+    {
+      $sort: { year: 1, month: 1 }
+    }
+  ]);
+};
+
+// Calculate employee growth for HR
+const calculateEmployeeGrowthForHR = async (hrId) => {
+  const currentMonth = new Date().getMonth();
+  const currentYear = new Date().getFullYear();
+  
+  const startOfCurrentMonth = new Date(currentYear, currentMonth, 1);
+  const startOfLastMonth = new Date(currentYear, currentMonth - 1, 1);
+  const startOfLastYear = new Date(currentYear - 1, 0, 1);
+  const endOfLastYear = new Date(currentYear - 1, 11, 31);
+
+  const [
+    currentMonthEmployees,
+    lastMonthEmployees,
+    lastYearEmployees,
+    currentYearEmployees
+  ] = await Promise.all([
+    Employee.countDocuments({
+      addedBy: hrId,
+      dateOfJoining: { $gte: startOfCurrentMonth }
+    }),
+    Employee.countDocuments({
+      addedBy: hrId,
+      dateOfJoining: { 
+        $gte: startOfLastMonth,
+        $lt: startOfCurrentMonth
+      }
+    }),
+    Employee.countDocuments({
+      addedBy: hrId,
+      dateOfJoining: {
+        $gte: startOfLastYear,
+        $lte: endOfLastYear
+      }
+    }),
+    Employee.countDocuments({
+      addedBy: hrId,
+      dateOfJoining: { $gte: new Date(currentYear, 0, 1) }
+    })
+  ]);
+
+  const monthlyChange = lastMonthEmployees > 0 
+    ? (((currentMonthEmployees - lastMonthEmployees) / lastMonthEmployees) * 100).toFixed(1)
+    : currentMonthEmployees > 0 ? 100 : 0;
+
+  const growthPercentage = lastYearEmployees > 0 
+    ? (((currentYearEmployees - lastYearEmployees) / lastYearEmployees) * 100).toFixed(1)
+    : currentYearEmployees > 0 ? 100 : 0;
+
+  return {
+    growthPercentage: parseFloat(growthPercentage),
+    monthlyChange: parseFloat(monthlyChange)
+  };
+};
+
+// Calculate leave approval rate for HR employees
+const calculateLeaveApprovalRateForHR = async (hrEmployeeIds) => {
+  if (!hrEmployeeIds || hrEmployeeIds.length === 0) {
+    return { approvalRate: 0, utilizationRate: 0, change: "0" };
+  }
+
+  const currentMonth = new Date().getMonth();
+  const currentYear = new Date().getFullYear();
+  const startOfMonth = new Date(currentYear, currentMonth, 1);
+
+  const leaveStats = await Leave.aggregate([
+    {
+      $match: {
+        employee: { $in: hrEmployeeIds },
+        createdAt: { $gte: startOfMonth }
+      }
+    },
+    {
+      $group: {
+        _id: "$status",
+        count: { $sum: 1 },
+        totalDays: {
+          $sum: {
+            $ceil: {
+              $divide: [
+                { $subtract: ["$endDate", "$startDate"] },
+                1000 * 60 * 60 * 24
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]);
+
+  let total = 0;
+  let approved = 0;
+  let totalDays = 0;
+
+  leaveStats.forEach(stat => {
+    total += stat.count;
+    totalDays += stat.totalDays;
+    if (stat._id === "Approved") {
+      approved = stat.count;
+    }
+  });
+
+  const approvalRate = total > 0 ? ((approved / total) * 100).toFixed(1) : 0;
+  
+  // Calculate utilization rate (assuming 2 leaves per employee per month)
+  const totalEmployees = hrEmployeeIds.length;
+  const maxPossibleLeaves = totalEmployees * 2;
+  const utilizationRate = maxPossibleLeaves > 0 
+    ? ((totalDays / maxPossibleLeaves) * 100).toFixed(1) 
+    : 0;
+
+  return {
+    approvalRate: parseFloat(approvalRate),
+    utilizationRate: parseFloat(utilizationRate),
+    change: "-2.5" // This could be calculated by comparing with previous month
+  };
+};
+
 // Get today's attendance statistics
 const getTodayAttendanceStats = async (today) => {
   const totalEmployees = await Employee.countDocuments({ isActive: true });
@@ -792,13 +1198,15 @@ export const getDashboardStats = async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    console.log(`Dashboard stats requested by ${role} with ID: ${employeeId}`);
+
     // Role-based data access
     let dashboardStats;
     
     switch (role) {
       case "HR_Manager":
       case "Admin":
-        dashboardStats = await getHRDashboardStats(today);
+        dashboardStats = await getHRDashboardStats(today, employeeId);
         break;
       case "Team_Leader":
         dashboardStats = await getTeamLeaderDashboardStats(today, employeeId);
@@ -816,7 +1224,8 @@ export const getDashboardStats = async (req, res) => {
     res.status(200).json({
       success: true,
       stats: dashboardStats,
-      userRole: role
+      userRole: role,
+      message: `Dashboard data for ${role}`
     });
 
   } catch (error) {
@@ -869,12 +1278,16 @@ export const getDashboardAnalytics = async (req, res) => {
 };
 
 // HR Manager Dashboard Stats
-const getHRDashboardStats = async (today) => {
+const getHRDashboardStats = async (today, hrId) => {
   const startOfWeek = new Date(today);
   startOfWeek.setDate(today.getDate() - today.getDay());
   
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   const startOfYear = new Date(today.getFullYear(), 0, 1);
+
+  // Get HR-specific employees
+  const hrEmployees = await Employee.find({ addedBy: hrId, isActive: true }).select('_id');
+  const hrEmployeeIds = hrEmployees.map(emp => emp._id);
 
   // Get all data in parallel for better performance
   const [
@@ -894,25 +1307,25 @@ const getHRDashboardStats = async (today) => {
     employeeGrowth,
     leaveApprovalRate
   ] = await Promise.all([
-    // Basic counts
-    Employee.countDocuments(),
-    Employee.countDocuments({ isActive: true }),
+    // Basic counts - HR specific
+    Employee.countDocuments({ addedBy: hrId }),
+    Employee.countDocuments({ addedBy: hrId, isActive: true }),
 
-    // Today's attendance stats
-    getTodayAttendanceStats(today),
+    // Today's attendance stats - HR specific
+    getTodayAttendanceStatsForHR(today, hrEmployeeIds),
     
-    // Weekly stats
-    getPeriodAttendanceStats(startOfWeek, today),
+    // Weekly stats - HR specific
+    getPeriodAttendanceStatsForHR(startOfWeek, today, hrEmployeeIds),
     
-    // Monthly stats
-    getPeriodAttendanceStats(startOfMonth, today),
+    // Monthly stats - HR specific
+    getPeriodAttendanceStatsForHR(startOfMonth, today, hrEmployeeIds),
     
-    // Yearly stats
-    getPeriodAttendanceStats(startOfYear, today),
+    // Yearly stats - HR specific
+    getPeriodAttendanceStatsForHR(startOfYear, today, hrEmployeeIds),
 
-    // Leave stats
-    Leave.countDocuments({ status: "Pending" }),
-    Leave.find({ status: "Pending" })
+    // Leave stats - HR specific
+    Leave.countDocuments({ employee: { $in: hrEmployeeIds }, status: "Pending" }),
+    Leave.find({ employee: { $in: hrEmployeeIds }, status: "Pending" })
       .populate('employee', 'name employeeId')
       .sort({ createdAt: -1 })
       .limit(5)
@@ -935,18 +1348,18 @@ const getHRDashboardStats = async (today) => {
       .limit(5)
       .lean(),
 
-    // Department-wise employee counts
-    getDepartmentStats(),
+    // Department-wise employee counts - HR specific
+    getDepartmentStatsForHR(hrId),
     
-    // Attendance trends for charts
-    getAttendanceTrends(),
+    // Attendance trends for charts - HR specific
+    getAttendanceTrendsForHR(hrEmployeeIds),
     
-    // Leave trends for charts
-    getLeaveTrends(),
+    // Leave trends for charts - HR specific
+    getLeaveTrendsForHR(hrEmployeeIds),
 
-    // Additional metrics
-    calculateEmployeeGrowth(),
-    calculateLeaveApprovalRate()
+    // Additional metrics - HR specific
+    calculateEmployeeGrowthForHR(hrId),
+    calculateLeaveApprovalRateForHR(hrEmployeeIds)
   ]);
 
   // Calculate attendance percentages
@@ -1057,14 +1470,29 @@ const getHRDashboardStats = async (today) => {
 
 // Team Leader Dashboard Stats
 const getTeamLeaderDashboardStats = async (today, teamLeaderId) => {
-  // Get team members - include both managed and added employees
+  console.log('Team Leader ID:', teamLeaderId);
+  console.log('Team Leader ID type:', typeof teamLeaderId);
+  
+  // Convert to ObjectId if it's a string
+  const objectId = new mongoose.Types.ObjectId(teamLeaderId);
+  console.log('ObjectId:', objectId);
+  
+  // Get team members - include both managed and added employees + self
   const teamMembers = await Employee.find({ 
     $or: [
-      { manager: teamLeaderId },
-      { addedBy: teamLeaderId }
+      { manager: objectId },      // Jo employees iske under report karte hai
+      { addedBy: objectId },       // Jo employees isne add kiye hai
+      { _id: objectId }            // Team Leader khud bhi include
     ],
     isActive: true 
-  }).select('_id name employeeId department designation');
+  }).populate('department', 'name')
+    .populate('designation', 'title')
+    .populate('workShift', 'name startTime endTime')
+    .populate('officeLocation', 'officeName')
+    .select('_id name employeeId department designation role salary dateOfJoining workShift officeLocation mobile email');
+
+  console.log('Team Members Found:', teamMembers.length);
+  console.log('Team Members:', teamMembers.map(m => ({ id: m._id, name: m.name, role: m.role })));
 
   const teamMemberIds = teamMembers.map(member => member._id);
 
@@ -1072,27 +1500,56 @@ const getTeamLeaderDashboardStats = async (today, teamLeaderId) => {
   startOfWeek.setDate(today.getDate() - today.getDay());
   
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const startOfYear = new Date(today.getFullYear(), 0, 1);
 
   // Get team-specific data
   const [
     teamTodayAttendance,
+    teamWeekAttendance,
     teamMonthAttendance,
+    teamYearAttendance,
     pendingTeamLeaves,
+    approvedTeamLeaves,
+    rejectedTeamLeaves,
     recentTeamLeaves,
     teamAttendanceTrends,
     upcomingTeamEvents,
-    recentAnnouncements
+    recentAnnouncements,
+    teamMemberDetails,
+    teamDepartmentStats,
+    teamDesignationStats,
+    teamSalaryStats
   ] = await Promise.all([
     // Today's attendance for team
     getTeamAttendanceStats(today, null, teamMemberIds),
     
+    // Weekly attendance for team
+    getTeamAttendanceStats(startOfWeek, today, teamMemberIds),
+    
     // Monthly attendance for team
     getTeamAttendanceStats(startOfMonth, today, teamMemberIds),
+    
+    // Yearly attendance for team
+    getTeamAttendanceStats(startOfYear, today, teamMemberIds),
 
     // Pending leaves for team
     Leave.countDocuments({ 
       employee: { $in: teamMemberIds },
       status: "Pending" 
+    }),
+    
+    // Approved leaves for team this month
+    Leave.countDocuments({ 
+      employee: { $in: teamMemberIds },
+      status: "Approved",
+      createdAt: { $gte: startOfMonth }
+    }),
+    
+    // Rejected leaves for team this month
+    Leave.countDocuments({ 
+      employee: { $in: teamMemberIds },
+      status: "Rejected",
+      createdAt: { $gte: startOfMonth }
     }),
 
     // Recent leaves for team
@@ -1123,7 +1580,81 @@ const getTeamLeaderDashboardStats = async (today, teamLeaderId) => {
       .populate('createdBy', 'name')
       .sort({ createdAt: -1 })
       .limit(5)
-      .lean()
+      .lean(),
+      
+    // Team member detailed performance
+    getTeamMemberPerformance(teamMemberIds),
+    
+    // Team department distribution
+    Employee.aggregate([
+      {
+        $match: {
+          _id: { $in: teamMemberIds }
+        }
+      },
+      {
+        $lookup: {
+          from: "departments",
+          localField: "department",
+          foreignField: "_id",
+          as: "departmentInfo"
+        }
+      },
+      {
+        $unwind: "$departmentInfo"
+      },
+      {
+        $group: {
+          _id: "$departmentInfo.name",
+          count: { $sum: 1 },
+          avgSalary: { $avg: "$salary" }
+        }
+      }
+    ]),
+    
+    // Team designation distribution
+    Employee.aggregate([
+      {
+        $match: {
+          _id: { $in: teamMemberIds }
+        }
+      },
+      {
+        $lookup: {
+          from: "designations",
+          localField: "designation",
+          foreignField: "_id",
+          as: "designationInfo"
+        }
+      },
+      {
+        $unwind: "$designationInfo"
+      },
+      {
+        $group: {
+          _id: "$designationInfo.title",
+          count: { $sum: 1 }
+        }
+      }
+    ]),
+    
+    // Team salary statistics
+    Employee.aggregate([
+      {
+        $match: {
+          _id: { $in: teamMemberIds }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalSalary: { $sum: "$salary" },
+          avgSalary: { $avg: "$salary" },
+          minSalary: { $min: "$salary" },
+          maxSalary: { $max: "$salary" }
+        }
+      }
+    ])
   ]);
 
   // Calculate team statistics
@@ -1135,6 +1666,14 @@ const getTeamLeaderDashboardStats = async (today, teamLeaderId) => {
   const monthAttendanceRate = teamSize > 0 
     ? (teamMonthAttendance.present / teamSize * 100).toFixed(1)
     : 0;
+    
+  const weekAttendanceRate = teamSize > 0 
+    ? (teamWeekAttendance.present / teamSize * 100).toFixed(1)
+    : 0;
+    
+  const yearAttendanceRate = teamSize > 0 
+    ? (teamYearAttendance.present / teamSize * 100).toFixed(1)
+    : 0;
 
   // Format recent team leaves
   const formattedRecentLeaves = recentTeamLeaves.map(leave => ({
@@ -1142,24 +1681,37 @@ const getTeamLeaderDashboardStats = async (today, teamLeaderId) => {
       name: {
         first: leave.employee?.name?.first || 'Unknown',
         last: leave.employee?.name?.last || ''
-      }
+      },
+      employeeId: leave.employee?.employeeId
     },
     leaveType: leave.leaveType,
     duration: Math.ceil((new Date(leave.endDate) - new Date(leave.startDate)) / (1000 * 60 * 60 * 24)) + 1,
     startDate: leave.startDate,
-    endDate: leave.endDate
+    endDate: leave.endDate,
+    status: leave.status,
+    reason: leave.reason
   }));
 
-  // Format team member performance
-  const teamPerformance = await getTeamMemberPerformance(teamMemberIds);
+  // Get salary stats
+  const salaryStats = teamSalaryStats[0] || {
+    totalSalary: 0,
+    avgSalary: 0,
+    minSalary: 0,
+    maxSalary: 0
+  };
 
   return {
     overview: {
-      teamSize: teamSize,
-      activeTeamMembers: teamSize,
+      teamSize: Math.max(teamSize, 1), // At least show 1 for Team Leader himself
+      activeTeamMembers: Math.max(teamSize, 1),
       pendingLeaves: pendingTeamLeaves,
+      approvedLeaves: approvedTeamLeaves,
+      rejectedLeaves: rejectedTeamLeaves,
       todayPresent: teamTodayAttendance.present,
-      todayAbsent: teamTodayAttendance.absent
+      todayAbsent: teamTodayAttendance.absent,
+      todayLate: teamTodayAttendance.late,
+      totalSalaryBudget: salaryStats.totalSalary,
+      avgTeamSalary: Math.round(salaryStats.avgSalary)
     },
     attendance: {
       today: {
@@ -1167,19 +1719,59 @@ const getTeamLeaderDashboardStats = async (today, teamLeaderId) => {
         absent: teamTodayAttendance.absent,
         late: teamTodayAttendance.late,
         halfDay: teamTodayAttendance.halfDay,
-        rate: parseFloat(todayAttendanceRate)
-      }
+        rate: parseFloat(todayAttendanceRate),
+        totalEmployees: teamSize
+      },
+      week: {
+        present: teamWeekAttendance.present,
+        absent: teamWeekAttendance.absent,
+        late: teamWeekAttendance.late,
+        halfDay: teamWeekAttendance.halfDay,
+        rate: parseFloat(weekAttendanceRate),
+        totalHours: teamWeekAttendance.totalHours,
+        overtimeHours: teamWeekAttendance.overtimeHours,
+        avgHoursWorked: teamWeekAttendance.avgHoursWorked
+      },
+      month: {
+        present: teamMonthAttendance.present,
+        absent: teamMonthAttendance.absent,
+        late: teamMonthAttendance.late,
+        halfDay: teamMonthAttendance.halfDay,
+        rate: parseFloat(monthAttendanceRate),
+        totalHours: teamMonthAttendance.totalHours,
+        overtimeHours: teamMonthAttendance.overtimeHours,
+        avgHoursWorked: teamMonthAttendance.avgHoursWorked
+      },
+      year: {
+        present: teamYearAttendance.present,
+        absent: teamYearAttendance.absent,
+        rate: parseFloat(yearAttendanceRate),
+        totalHours: teamYearAttendance.totalHours,
+        overtimeHours: teamYearAttendance.overtimeHours
+      },
+      trends: teamAttendanceTrends
+    },
+    leaves: {
+      pending: pendingTeamLeaves,
+      approvedThisMonth: approvedTeamLeaves,
+      rejectedThisMonth: rejectedTeamLeaves,
+      approvalRate: (approvedTeamLeaves + rejectedTeamLeaves) > 0 
+        ? ((approvedTeamLeaves / (approvedTeamLeaves + rejectedTeamLeaves)) * 100).toFixed(1)
+        : 0
     },
     quickStats: {
       averageAttendance: parseFloat(monthAttendanceRate),
       avgHoursWorked: teamMonthAttendance.avgHoursWorked || 8.2,
       overtimeHours: teamMonthAttendance.overtimeHours || 0,
-      leaveUtilization: Math.round((pendingTeamLeaves / teamSize) * 100) || 0,
-      pendingTasks: 0 // Add this field that frontend expects
+      leaveUtilization: teamSize > 0 ? Math.round((pendingTeamLeaves / teamSize) * 100) : 0,
+      pendingTasks: 0,
+      teamProductivity: teamSize > 0 ? Math.round(parseFloat(monthAttendanceRate)) : 0
     },
     analytics: {
       teamAttendanceTrends: teamAttendanceTrends,
-      teamPerformance: teamPerformance
+      teamPerformance: teamMemberDetails,
+      departmentDistribution: teamDepartmentStats,
+      designationDistribution: teamDesignationStats
     },
     recentActivities: {
       pendingLeaves: formattedRecentLeaves,
@@ -1192,8 +1784,27 @@ const getTeamLeaderDashboardStats = async (today, teamLeaderId) => {
       name: member.name,
       employeeId: member.employeeId,
       department: member.department,
-      designation: member.designation
-    }))
+      designation: member.designation,
+      role: member.role,
+      salary: member.salary,
+      dateOfJoining: member.dateOfJoining,
+      workShift: member.workShift,
+      officeLocation: member.officeLocation,
+      mobile: member.mobile,
+      email: member.email
+    })),
+    teamStats: {
+      totalMembers: teamSize,
+      activeMembers: teamSize,
+      departments: teamDepartmentStats.length,
+      designations: teamDesignationStats.length,
+      salaryBudget: salaryStats.totalSalary,
+      avgSalary: Math.round(salaryStats.avgSalary),
+      salaryRange: {
+        min: salaryStats.minSalary,
+        max: salaryStats.maxSalary
+      }
+    }
   };
 };
 
@@ -1606,11 +2217,12 @@ const generateTeamAlerts = (teamAttendance, pendingLeaves, teamSize) => {
 
 // Analytics functions for Team Leader
 const getTeamLeaderAnalytics = async (period, teamLeaderId) => {
-  // Get team members - include both managed and added employees
+  // Get team members - include both managed and added employees + self
   const teamMembers = await Employee.find({ 
     $or: [
       { manager: teamLeaderId },
-      { addedBy: teamLeaderId }
+      { addedBy: teamLeaderId },
+      { _id: teamLeaderId }            // Team Leader khud bhi include
     ],
     isActive: true 
   }).select('_id');

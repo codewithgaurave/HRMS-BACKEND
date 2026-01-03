@@ -15,6 +15,7 @@ export const createWorkShift = async (req, res) => {
       endTime,
       status,
       createdBy: req.employee._id,
+      hrId: req.employee._id,
     });
 
     res.status(201).json({ message: "Work shift created", shift: newShift });
@@ -26,7 +27,7 @@ export const createWorkShift = async (req, res) => {
 // Get all shifts
 export const getWorkShiftsWithoutFilters = async (req, res) => {
   try {
-    const shifts = await WorkShift.find({createdBy:req.employee._id}).populate("createdBy", "name.first name.last employeeId role");
+    const shifts = await WorkShift.find({ hrId: req.employee._id }).populate("createdBy", "name.first name.last employeeId role");
     res.json(shifts);
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
@@ -46,7 +47,7 @@ export const getWorkShifts = async (req, res) => {
     } = req.query;
 
     // Build filter object
-    const filter = { createdBy: req.employee._id };
+    const filter = { hrId: req.employee._id };
 
     // Search filter (name)
     if (search) {
@@ -99,7 +100,7 @@ export const getWorkShifts = async (req, res) => {
 // Get single shift
 export const getWorkShiftById = async (req, res) => {
   try {
-    const shift = await WorkShift.findById(req.params.id).populate("createdBy", "name.first name.last employeeId");
+    const shift = await WorkShift.findOne({ _id: req.params.id, hrId: req.employee._id }).populate("createdBy", "name.first name.last employeeId");
     if (!shift) return res.status(404).json({ message: "Work shift not found" });
 
     res.json(shift);
@@ -113,8 +114,8 @@ export const updateWorkShift = async (req, res) => {
   try {
     const { name, startTime, endTime, status } = req.body;
 
-    const updatedShift = await WorkShift.findByIdAndUpdate(
-      req.params.id,
+    const updatedShift = await WorkShift.findOneAndUpdate(
+      { _id: req.params.id, hrId: req.employee._id },
       { name, startTime, endTime, status },
       { new: true },
 
@@ -131,7 +132,7 @@ export const updateWorkShift = async (req, res) => {
 // Delete shift (HR Only)
 export const deleteWorkShift = async (req, res) => {
   try {
-    const deletedShift = await WorkShift.findByIdAndDelete(req.params.id);
+    const deletedShift = await WorkShift.findOneAndDelete({ _id: req.params.id, hrId: req.employee._id });
     if (!deletedShift) return res.status(404).json({ message: "Work shift not found" });
 
     res.json({ message: "Work shift deleted",

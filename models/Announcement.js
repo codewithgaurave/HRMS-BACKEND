@@ -36,6 +36,18 @@ const announcementSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Employee",
     },
+
+    // NEW: HR Scope for filtering announcements
+    hrScope: {
+      managedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Employee"
+      },
+      targetEmployees: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Employee"
+      }]
+    },
   },
   { timestamps: true }
 );

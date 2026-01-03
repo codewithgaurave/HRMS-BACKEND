@@ -42,7 +42,8 @@ export const createOfficeLocation = async (req, res) => {
       officeType: officeType || "Office",
       branchCode: branchCode || null,
       contactPerson: contactPerson || null,
-      createdBy: req.employee._id
+      createdBy: req.employee._id,
+      hrId: req.employee._id
     });
 
     // Populate createdBy field
@@ -78,7 +79,7 @@ export const createOfficeLocation = async (req, res) => {
 // Get all Office Locations without filters
 export const getOfficeLocationsWithoutFilters = async (req, res) => {
   try {
-    const officeLocations = await OfficeLocation.find()
+    const officeLocations = await OfficeLocation.find({ hrId: req.employee._id })
       .populate("createdBy", "name.first name.last employeeId role")
 
     return res.status(200).json({
@@ -110,7 +111,7 @@ export const getOfficeLocations = async (req, res) => {
     } = req.query;
 
     // Build filter object
-    const filter = {};
+    const filter = { hrId: req.employee._id };
 
     // Search filter (office name or address)
     if (search) {

@@ -251,11 +251,21 @@ export const createLeave = async (req, res) => {
 // Get all leaves of mt teams added by current user without filters
 export const getMyAndTeamLeavesWithoutFilters = async (req, res) => {
   try {
-    // Find employees added by current user (team members)
-    const addedEmployees = await Employee.find({$or:[{addedBy: req.employee._id},{manager: req.employee._id}] }).select("_id");
-
-    // Combine own ID + team member IDs
-    const employeeIds = [req.employee._id, ...addedEmployees.map(e => e._id)];
+    // Find employees based on role
+    let employeeIds = [];
+    
+    if (req.employee.role === 'HR_Manager') {
+      // HR can see employees they added + their own leaves
+      const addedEmployees = await Employee.find({ addedBy: req.employee._id }).select("_id");
+      employeeIds = [req.employee._id, ...addedEmployees.map(e => e._id)];
+    } else if (req.employee.role === 'Team_Leader') {
+      // Team Leader can see their team members + their own leaves
+      const teamMembers = await Employee.find({ manager: req.employee._id }).select("_id");
+      employeeIds = [req.employee._id, ...teamMembers.map(e => e._id)];
+    } else {
+      // Regular employees can only see their own leaves
+      employeeIds = [req.employee._id];
+    }
 
     // Fetch all leaves belonging to those employees
     const leaves = await Leave.find({ employee: { $in: employeeIds } })
@@ -358,11 +368,21 @@ export const getMyAndTeamLeaves = async (req, res) => {
       limit = 10,
     } = req.query;
 
-    // Find employees added by current user (team members)
-    const addedEmployees = await Employee.find({$or:[{addedBy: req.employee._id},{manager: req.employee._id}] }).select("_id");
-
-    // Combine own ID + team member IDs
-    const employeeIds = [...addedEmployees.map(e => e._id)];
+    // Find employees based on role
+    let employeeIds = [];
+    
+    if (req.employee.role === 'HR_Manager') {
+      // HR can see employees they added + their own leaves
+      const addedEmployees = await Employee.find({ addedBy: req.employee._id }).select("_id");
+      employeeIds = [req.employee._id, ...addedEmployees.map(e => e._id)];
+    } else if (req.employee.role === 'Team_Leader') {
+      // Team Leader can see ONLY their team members' leaves (NOT their own)
+      const teamMembers = await Employee.find({ manager: req.employee._id }).select("_id");
+      employeeIds = teamMembers.map(e => e._id); // Exclude team leader's own leaves
+    } else {
+      // Regular employees can only see their own leaves
+      employeeIds = [req.employee._id];
+    }
 
     // Build filter object
     const filter = { employee: { $in: employeeIds } };

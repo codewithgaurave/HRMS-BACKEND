@@ -24,9 +24,17 @@ const workShiftSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Employee",
     },
+    hrId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Employee",
+      required: true,
+    },
   },
   { timestamps: true }
 );
+
+// Compound index to ensure unique work shift names per HR
+workShiftSchema.index({ name: 1, hrId: 1 }, { unique: true });
 
 const WorkShift = mongoose.model("WorkShift", workShiftSchema);
 export default WorkShift;

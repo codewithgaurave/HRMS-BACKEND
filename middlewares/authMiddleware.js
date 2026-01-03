@@ -101,3 +101,14 @@ export const requireDashboardAccess = (req, res, next) => {
   }
   next();
 };
+
+// Allow HR Manager and Team Leader to access workshift data
+export const requireWorkshiftAccess = (req, res, next) => {
+  const allowedRoles = ["HR_Manager", "Team_Leader"];
+  if (!allowedRoles.includes(req.employee.role)) {
+    return res.status(403).json({ 
+      message: 'Access denied. HR Manager or Team Leader role required.' 
+    });
+  }
+  next();
+};

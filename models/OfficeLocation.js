@@ -50,10 +50,18 @@ const OfficeLocationSchema = new mongoose.Schema(
       ref: "Employee",
       required: true,
     },
+    hrId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Employee",
+      required: true,
+    },
   },
   {
     timestamps: true,
   }
 );
+
+// Compound index to ensure unique office names per HR
+OfficeLocationSchema.index({ officeName: 1, hrId: 1 }, { unique: true });
 
 export default mongoose.model("OfficeLocation", OfficeLocationSchema);

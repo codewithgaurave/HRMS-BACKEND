@@ -14,6 +14,7 @@ export const createNotice = async (req, res) => {
     }
 
     let targetEmployees = [];
+    let finalTargetAudience = targetAudience || 'All';
     
     // If Team Leader, send to team members only
     if (req.employee.role === 'Team_Leader') {
@@ -21,9 +22,11 @@ export const createNotice = async (req, res) => {
         $or: [
           { manager: req.employee._id },
           { addedBy: req.employee._id }
-        ]
+        ],
+        isActive: true
       });
       targetEmployees = teamMembers.map(member => member._id);
+      finalTargetAudience = 'Team';
       
       if (targetEmployees.length === 0) {
         return res.status(400).json({
@@ -32,6 +35,18 @@ export const createNotice = async (req, res) => {
         });
       }
     }
+    // If HR Manager, can send to all employees under them
+    else if (req.employee.role === 'HR_Manager') {
+      if (finalTargetAudience === 'Team' || finalTargetAudience === 'Department') {
+        // Get employees added by this HR
+        const hrEmployees = await Employee.find({ 
+          addedBy: req.employee._id,
+          isActive: true
+        });
+        targetEmployees = hrEmployees.map(emp => emp._id);
+      }
+      // For 'All' audience, targetEmployees can remain empty as it will be handled by filtering
+    }
 
     const notice = new Notice({
       title,
@@ -39,8 +54,8 @@ export const createNotice = async (req, res) => {
       type: type || 'General',
       priority: priority || 'Medium',
       createdBy: req.employee._id,
-      targetAudience: req.employee.role === 'Team_Leader' ? 'Team' : (targetAudience || 'All'),
-      targetEmployees: req.employee.role === 'Team_Leader' ? targetEmployees : [],
+      targetAudience: finalTargetAudience,
+      targetEmployees: targetEmployees,
       expiryDate: expiryDate ? new Date(expiryDate) : null
     });
 
@@ -68,15 +83,58 @@ export const createNotice = async (req, res) => {
 export const getNoticesForEmployee = async (req, res) => {
   try {
     const { page = 1, limit = 10, type } = req.query;
+    const currentEmployee = req.employee;
     
-    // Simple filter - show all active notices
+    console.log('Employee ID:', currentEmployee._id);
+    console.log('Employee Role:', currentEmployee.role);
+    
+    // Find who added this employee (their HR) and their manager
+    const employeeData = await Employee.findById(currentEmployee._id)
+      .populate('addedBy', '_id role name')
+      .populate('manager', '_id role name');
+    
+    if (!employeeData) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found"
+      });
+    }
+
+    console.log('Employee addedBy:', employeeData.addedBy);
+    console.log('Employee manager:', employeeData.manager);
+
+    // Build filter to show notices from HR and Team Leader only
+    let creatorIds = [];
+    
+    // Add HR manager (who added this employee)
+    if (employeeData.addedBy) {
+      creatorIds.push(employeeData.addedBy._id);
+    }
+    
+    // Add Team Leader (manager)
+    if (employeeData.manager) {
+      creatorIds.push(employeeData.manager._id);
+    }
+
+    console.log('Creator IDs allowed:', creatorIds);
+
+    // Filter notices - ONLY from HR and Team Leader
     let filter = {
-      isActive: true
+      isActive: true,
+      $or: [
+        // Notices from HR/Team Leader
+        { createdBy: { $in: creatorIds } },
+        // Notices specifically targeted to this employee
+        { targetEmployees: currentEmployee._id }
+      ]
     };
 
+    // Remove the 'All' audience filter to be more restrictive
     if (type) {
       filter.type = type;
     }
+
+    console.log('Final filter:', JSON.stringify(filter, null, 2));
 
     const skip = (page - 1) * limit;
 
@@ -85,6 +143,11 @@ export const getNoticesForEmployee = async (req, res) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
+
+    console.log('Found notices:', notices.length);
+    notices.forEach(notice => {
+      console.log(`Notice: ${notice.title} by ${notice.createdBy?.name} (${notice.createdBy?.role})`);
+    });
 
     const total = await Notice.countDocuments(filter);
 
@@ -100,6 +163,7 @@ export const getNoticesForEmployee = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Error in getNoticesForEmployee:', error);
     res.status(500).json({
       success: false,
       message: 'Error fetching notices',

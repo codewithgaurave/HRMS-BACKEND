@@ -9,7 +9,8 @@ export const createDepartment = async (req, res) => {
       return res.status(400).json({ message: "Department name is required" });
     }
 
-    const exists = await Department.findOne({ name });
+    // Check if department exists for this HR
+    const exists = await Department.findOne({ name, hrId: req.employee._id });
     if (exists) {
       return res.status(400).json({ message: "Department already exists" });
     }
@@ -19,6 +20,7 @@ export const createDepartment = async (req, res) => {
       description,
       status,
       createdBy: req.employee._id,
+      hrId: req.employee._id,
     });
 
     res.status(201).json({ message: "Department created", department });
@@ -30,7 +32,8 @@ export const createDepartment = async (req, res) => {
 // Get all Departments
 export const getDepartmentsWithoutFilters = async (req, res) => {
   try {
-    const departments = await Department.find().populate(
+    // Filter by HR ID to show only departments created by this HR
+    const departments = await Department.find({ hrId: req.employee._id }).populate(
       "createdBy",
       "name.first name.last employeeId role"
     );
@@ -53,8 +56,8 @@ export const getDepartments = async (req, res) => {
       createdBy
     } = req.query;
 
-    // Build filter object
-    const filter = {};
+    // Build filter object - always filter by HR ID
+    const filter = { hrId: req.employee._id };
 
     // Search filter (name or description)
     if (search) {
@@ -116,7 +119,10 @@ export const getDepartments = async (req, res) => {
 // Get single Department
 export const getDepartmentById = async (req, res) => {
   try {
-    const department = await Department.findById(req.params.id).populate(
+    const department = await Department.findOne({ 
+      _id: req.params.id, 
+      hrId: req.employee._id 
+    }).populate(
       "createdBy",
       "name.first name.last employeeId"
     );
@@ -136,8 +142,8 @@ export const updateDepartment = async (req, res) => {
   try {
     const { name, description, status } = req.body;
 
-    const updated = await Department.findByIdAndUpdate(
-      req.params.id,
+    const updated = await Department.findOneAndUpdate(
+      { _id: req.params.id, hrId: req.employee._id },
       { name, description, status },
       { new: true }
     );
@@ -155,7 +161,10 @@ export const updateDepartment = async (req, res) => {
 // Delete Department (HR Only)
 export const deleteDepartment = async (req, res) => {
   try {
-    const deleted = await Department.findByIdAndDelete(req.params.id);
+    const deleted = await Department.findOneAndDelete({ 
+      _id: req.params.id, 
+      hrId: req.employee._id 
+    });
 
     if (!deleted) {
       return res.status(404).json({ message: "Department not found" });

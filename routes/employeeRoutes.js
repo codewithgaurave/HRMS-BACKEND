@@ -28,7 +28,8 @@ import {
   changeDepartment,
   updateWorkSchedule,
   updatePersonalInfo,
-  updateEmployeeCoordinates
+  updateEmployeeCoordinates,
+  getEmployeeFormData
 } from '../controllers/employeeController.js';
 import {
   authenticateToken,
@@ -49,6 +50,7 @@ router.post('/hr/create', authenticateToken, requireHRManager, createHRManager);
 
 // Employee management routes
 router.post('/register', authenticateToken, requireHRManager, registerEmployee);
+router.get('/form-data', authenticateToken, requireHRManager, getEmployeeFormData);
 router.get('/', authenticateToken, getAllEmployees);
 router.get('/without-filters', authenticateToken, getEmployeesWithoutFilters);
 router.get('/stats', authenticateToken, getEmployeeStats);

@@ -9,7 +9,10 @@ import {
   assignAsset,
   returnAsset,
   getAssetsByEmployee,
-  getAssetCategories
+  getAssetCategories,
+  getHRTeamAssets,
+  assignAssetToHRTeam,
+  getHRTeamEmployeesForAssets
 } from '../controllers/assetController.js';
 
 const router = express.Router();
@@ -19,6 +22,13 @@ router.use(authenticateToken);
 
 // Asset CRUD routes
 router.post('/', createAsset);
+
+// HR Team specific routes (must come before general routes)
+router.get('/team/hr', getHRTeamAssets);
+router.get('/team/employees', getHRTeamEmployeesForAssets);
+router.post('/:id/assign/team', assignAssetToHRTeam);
+
+// General routes
 router.get('/', getAllAssets);
 router.get('/categories', getAssetCategories);
 router.get('/:id', getAssetById);

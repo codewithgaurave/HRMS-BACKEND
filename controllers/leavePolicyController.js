@@ -22,6 +22,7 @@ export const createLeavePolicy = async (req, res) => {
       carryForward,
       description,
       createdBy: req.employee._id,
+      hrId: req.employee._id,
     });
 
     res.status(201).json({ message: "Leave policy created successfully", policy: newPolicy });
@@ -34,7 +35,7 @@ export const createLeavePolicy = async (req, res) => {
 // Get all leave policies without filters
 export const getLeavePoliciesWithoutFilters = async (req, res) => {
   try {
-    const policies = await LeavePolicy.find({ createdBy: req.employee._id })
+    const policies = await LeavePolicy.find({ hrId: req.employee._id })
       .populate("createdBy", "name.first name.last employeeId role");
     res.json(policies);
   } catch (error) {
@@ -57,7 +58,7 @@ export const getLeavePolicies = async (req, res) => {
     } = req.query;
 
     // Build filter object
-    const filter = { createdBy: req.employee._id };
+    const filter = { hrId: req.employee._id };
 
     // Search filter (leaveType or description)
     if (search) {

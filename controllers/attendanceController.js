@@ -736,7 +736,7 @@ export const getTodayAttendanceOfEmployee = async (req, res) => {
   }
 };
 
-// @desc    Get attendance for a specific date range with enhanced filters
+// @desc    Get attendance for a specific date range with enhanced filters (HR sees only their team)
 // @route   GET /api/attendance
 // @access  Private
 export const getAttendance = async (req, res) => {
@@ -759,11 +759,28 @@ export const getAttendance = async (req, res) => {
 
     const query = {};
 
-    // Role-based access control
+    // Role-based access control - HR sees only their team members
     if (req.employee.role === 'HR_Manager') {
-      // HR can see all employees' attendance
+      // HR can see employees they added + their own attendance
+      const teamMembers = await Employee.find({ 
+        addedBy: req.employee._id,
+        isActive: true 
+      }).select('_id');
+      
+      const allowedEmployees = [req.employee._id, ...teamMembers.map(member => member._id)];
+      
       if (employeeId) {
+        // Check if requested employee is in allowed list
+        if (!allowedEmployees.some(id => id.toString() === employeeId)) {
+          return res.status(403).json({
+            success: false,
+            message: "Access denied. You can only view attendance of employees you manage."
+          });
+        }
         query.employee = employeeId;
+      } else {
+        // Show only team members' attendance
+        query.employee = { $in: allowedEmployees };
       }
     } else if (req.employee.role === 'Team_Leader') {
       // Team Leader can see their own and their team members' attendance
@@ -823,8 +840,9 @@ export const getAttendance = async (req, res) => {
         
         searchEmployees = [req.employee._id, ...teamMembers.map(member => member._id)];
       } else {
-        // HR: search all employees
+        // HR: search only within their added employees
         const employees = await Employee.find({
+          addedBy: req.employee._id,
           $or: [
             { 'name.first': { $regex: search, $options: 'i' } },
             { 'name.last': { $regex: search, $options: 'i' } },
@@ -832,7 +850,7 @@ export const getAttendance = async (req, res) => {
           ]
         }).select('_id');
         
-        searchEmployees = employees.map(emp => emp._id);
+        searchEmployees = [req.employee._id, ...employees.map(emp => emp._id)];
       }
 
       if (searchEmployees.length > 0) {
@@ -1002,7 +1020,7 @@ export const getAttendance = async (req, res) => {
   }
 };
 
-// @desc    Get attendance summary for employee
+// @desc    Get attendance summary for employee (HR sees only their team)
 // @route   GET /api/attendance/summary
 // @access  Private
 export const getAttendanceSummary = async (req, res) => {
@@ -1018,8 +1036,21 @@ export const getAttendanceSummary = async (req, res) => {
     if (employeeId && employeeId !== req.employee._id.toString()) {
       // User is requesting another employee's data
       if (req.employee.role === "HR_Manager") {
-        // HR can access any employee's summary
-        targetEmployeeId = employeeId;
+        // HR can access employees they added
+        const addedEmployee = await Employee.findOne({ 
+          _id: employeeId,
+          addedBy: req.employee._id,
+          isActive: true 
+        });
+        
+        if (addedEmployee) {
+          targetEmployeeId = employeeId;
+        } else {
+          return res.status(403).json({
+            success: false,
+            message: "Access denied. You can only view attendance summary of employees you manage."
+          });
+        }
       } else if (req.employee.role === "Team_Leader") {
         // Team Leader can access their team members' summary
         const teamMember = await Employee.findOne({ 
@@ -2094,8 +2125,17 @@ export const getEmployeeAttendances = async (req, res) => {
     let isAuthorized = false;
     
     if (req.employee.role === "HR_Manager") {
-      // HR can access any employee's attendance
-      isAuthorized = true;
+      // HR can access employees they added
+      if (req.employee._id.toString() === employeeId) {
+        isAuthorized = true;
+      } else {
+        const addedEmployee = await Employee.findOne({ 
+          _id: employeeId,
+          addedBy: req.employee._id,
+          isActive: true 
+        });
+        isAuthorized = !!addedEmployee;
+      }
     } else if (req.employee.role === "Team_Leader") {
       // Team Leader can access their own and team members' attendance
       if (req.employee._id.toString() === employeeId) {

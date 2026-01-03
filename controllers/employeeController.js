@@ -164,9 +164,9 @@ export const registerEmployee = async (req, res) => {
     ];
 
     for (const ref of requiredRefs) {
-      const exists = await ref.model.findById(ref.field);
+      const exists = await ref.model.findOne({ _id: ref.field, hrId: req.employee._id });
       if (!exists) {
-        return res.status(400).json({ message: `${ref.name} not found.` });
+        return res.status(400).json({ message: `${ref.name} not found or not accessible.` });
       }
     }
 
@@ -239,7 +239,7 @@ export const registerEmployee = async (req, res) => {
 };
 
 
-// Get all employees with advanced filtering
+// Get all employees with advanced filtering (HR sees only their added employees)
 export const getAllEmployees = async (req, res) => {
   try {
     const {
@@ -258,10 +258,23 @@ export const getAllEmployees = async (req, res) => {
       limit = 10,
     } = req.query;
 
-    // Build filter object - HR can see all employees
+    // Build filter object - HR can only see employees they added
     const filter = {};
-    if (req.employee.role !== 'HR_Manager') {
-      filter.addedBy = req.employee._id;
+    if (req.employee.role === 'HR_Manager') {
+      // HR sees employees they added + themselves
+      filter.$or = [
+        { addedBy: req.employee._id },
+        { _id: req.employee._id }
+      ];
+    } else if (req.employee.role === 'Team_Leader') {
+      // Team Leader sees their team members + themselves
+      filter.$or = [
+        { manager: req.employee._id },
+        { _id: req.employee._id }
+      ];
+    } else {
+      // Regular employees see only themselves
+      filter._id = req.employee._id;
     }
 
     // Search filter
@@ -332,13 +345,26 @@ export const getAllEmployees = async (req, res) => {
   }
 };
 
-// Get all employees without filters (simple version)
+// Get all employees without filters (simple version) - HR sees only their added employees
 export const getEmployeesWithoutFilters = async (req, res) => {
   try {
-    // HR can see all employees, others see only their added employees
-    const filter = {};
-    if (req.employee.role !== 'HR_Manager') {
-      filter.addedBy = req.employee._id;
+    // Build filter based on role
+    let filter = {};
+    if (req.employee.role === 'HR_Manager') {
+      // HR sees employees they added + themselves
+      filter.$or = [
+        { addedBy: req.employee._id },
+        { _id: req.employee._id }
+      ];
+    } else if (req.employee.role === 'Team_Leader') {
+      // Team Leader sees their team members + themselves
+      filter.$or = [
+        { manager: req.employee._id },
+        { _id: req.employee._id }
+      ];
+    } else {
+      // Regular employees see only themselves
+      filter._id = req.employee._id;
     }
     
     const employees = await Employee.find(filter)
@@ -525,9 +551,9 @@ export const updateEmployee = async (req, res) => {
 
     for (const ref of refChecks) {
       if (updates[ref.key]) {
-        const exists = await ref.model.findById(updates[ref.key]);
+        const exists = await ref.model.findOne({ _id: updates[ref.key], hrId: req.employee._id });
         if (!exists) {
-          return res.status(400).json({ message: `${ref.key} not found.` });
+          return res.status(400).json({ message: `${ref.key} not found or not accessible.` });
         }
       }
     }
@@ -672,15 +698,21 @@ export const getEmployeesAddedByMe = async (req, res) => {
     if (department) filter.department = department;
     if (designation) filter.designation = designation;
 
-    // Search filter
+    // Search filter - combine with existing filters using $and
     if (search) {
-      filter.$or = [
-        { "name.first": { $regex: search, $options: "i" } },
-        { "name.last": { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
-        { employeeId: { $regex: search, $options: "i" } }
+      filter.$and = [
+        {
+          $or: [
+            { "name.first": { $regex: search, $options: "i" } },
+            { "name.last": { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+            { employeeId: { $regex: search, $options: "i" } }
+          ]
+        }
       ];
     }
+
+    console.log('Filter object:', JSON.stringify(filter, null, 2));
 
     // Query DB with pagination
     const employees = await Employee.find(filter)
@@ -706,6 +738,7 @@ export const getEmployeesAddedByMe = async (req, res) => {
       employees,
     });
   } catch (error) {
+    console.error('getEmployeesAddedByMe error:', error);
     res.status(500).json({
       success: false,
       message: "Error fetching employees added by you.",
@@ -1778,6 +1811,42 @@ export const updateWorkSchedule = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: 'Error updating work schedule.',
+      error: error.message
+    });
+  }
+};
+
+// Get HR-specific dropdown data for employee forms
+export const getEmployeeFormData = async (req, res) => {
+  try {
+    // Get all dropdown options filtered by HR ID
+    const [departments, designations, employmentStatuses, officeLocations, workShifts, managers] = await Promise.all([
+      Department.find({ hrId: req.employee._id, status: 'Active' }).select('_id name description'),
+      Designation.find({ hrId: req.employee._id, status: 'Active' }).select('_id title description'),
+      EmploymentStatus.find({ hrId: req.employee._id, status: 'Active' }).select('_id title description'),
+      OfficeLocation.find({ hrId: req.employee._id }).select('_id officeName officeAddress officeType'),
+      WorkShift.find({ hrId: req.employee._id, status: 'Active' }).select('_id name startTime endTime'),
+      Employee.find({ 
+        $or: [
+          { addedBy: req.employee._id },
+          { _id: req.employee._id }
+        ],
+        role: { $in: ['HR_Manager', 'Team_Leader'] },
+        isActive: true
+      }).select('_id name employeeId role')
+    ]);
+
+    res.json({
+      departments,
+      designations,
+      employmentStatuses,
+      officeLocations,
+      workShifts,
+      managers
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error fetching form data.',
       error: error.message
     });
   }

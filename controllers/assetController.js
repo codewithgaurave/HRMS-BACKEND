@@ -246,11 +246,15 @@ export const assignAsset = async (req, res) => {
       });
     }
 
-    // Check if asset is already assigned to someone else
-    if (asset.status === 'Assigned') {
+    // Check if employee is already assigned this asset
+    const existingAssignment = asset.assignedTo.find(
+      assignment => assignment.employee.toString() === employeeId && assignment.isActive
+    );
+    
+    if (existingAssignment) {
       return res.status(400).json({
         success: false,
-        message: 'Asset is already assigned to another employee'
+        message: 'Asset is already assigned to this employee'
       });
     }
 
@@ -387,6 +391,212 @@ export const getAssetCategories = async (req, res) => {
   }
 };
 
+// Get HR Team Assets (HR can only see assets they can assign to their team)
+export const getHRTeamAssets = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      search = '',
+      category = '',
+      status = '',
+      condition = '',
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    // Get employees added by this HR manager
+    const teamMembers = await Employee.find({ addedBy: req.employee._id });
+    const teamMemberIds = teamMembers.map(member => member._id);
+    teamMemberIds.push(req.employee._id); // Include HR's own ID
+
+    const query = {};
+    
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { assetId: { $regex: search, $options: 'i' } },
+        { brand: { $regex: search, $options: 'i' } },
+        { model: { $regex: search, $options: 'i' } },
+        { serialNumber: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    if (category) query.category = category;
+    if (status) query.status = status;
+    if (condition) query.condition = condition;
+
+    const sort = {};
+    sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
+
+    const skip = (page - 1) * limit;
+    
+    const assets = await Asset.find(query)
+      .populate('assignedTo.employee', 'name employeeId designation department')
+      .populate('createdBy', 'name employeeId')
+      .sort(sort)
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    // Filter assets to show only those assigned to HR's team or available for assignment
+    const filteredAssets = assets.filter(asset => {
+      if (asset.status === 'Available' || asset.status === 'Under Maintenance' || asset.status === 'Retired') {
+        return true; // HR can see all unassigned assets
+      }
+      if (asset.status === 'Assigned') {
+        // Check if assigned to HR's team members
+        return asset.assignedTo.some(assignment => 
+          assignment.isActive && teamMemberIds.some(id => id.toString() === assignment.employee._id.toString())
+        );
+      }
+      return false;
+    });
+
+    const totalCount = await Asset.countDocuments(query);
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // Get statistics for HR's team
+    const stats = {
+      total: filteredAssets.length,
+      available: filteredAssets.filter(a => a.status === 'Available').length,
+      assigned: filteredAssets.filter(a => a.status === 'Assigned').length,
+      maintenance: filteredAssets.filter(a => a.status === 'Under Maintenance').length,
+      retired: filteredAssets.filter(a => a.status === 'Retired').length
+    };
+
+    res.json({
+      success: true,
+      assets: filteredAssets,
+      teamSize: teamMemberIds.length,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages,
+        totalCount: filteredAssets.length,
+        hasNext: page < totalPages,
+        hasPrev: page > 1
+      },
+      stats
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// HR Team Asset Assignment (HR can only assign to their team members)
+export const assignAssetToHRTeam = async (req, res) => {
+  try {
+    const { employeeId } = req.body;
+    const assetId = req.params.id;
+
+    if (!employeeId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Employee ID is required'
+      });
+    }
+
+    // Check if employee is in HR's team
+    const employee = await Employee.findOne({
+      _id: employeeId,
+      $or: [
+        { addedBy: req.employee._id },
+        { _id: req.employee._id } // HR can assign to themselves
+      ]
+    });
+
+    if (!employee) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only assign assets to employees you manage'
+      });
+    }
+
+    const asset = await Asset.findById(assetId);
+    if (!asset) {
+      return res.status(404).json({
+        success: false,
+        message: 'Asset not found'
+      });
+    }
+
+    // Check if employee is already assigned this asset
+    const existingAssignment = asset.assignedTo.find(
+      assignment => assignment.employee.toString() === employeeId && assignment.isActive
+    );
+    
+    if (existingAssignment) {
+      return res.status(400).json({
+        success: false,
+        message: 'Asset is already assigned to this employee'
+      });
+    }
+
+    // Initialize assignedTo if it doesn't exist or is not an array
+    if (!Array.isArray(asset.assignedTo)) {
+      asset.assignedTo = [];
+    }
+
+    // Add new assignment
+    asset.assignedTo.push({
+      employee: employeeId,
+      assignedDate: new Date(),
+      isActive: true
+    });
+    
+    asset.status = 'Assigned';
+    asset.updatedBy = req.employee.id;
+    
+    await asset.save();
+    await asset.populate('assignedTo.employee', 'name employeeId designation department');
+
+    res.json({
+      success: true,
+      message: 'Asset assigned successfully to team member',
+      asset
+    });
+  } catch (error) {
+    console.error('Assign Asset to HR Team Error:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// Get Available Employees for HR (only HR's team members)
+export const getHRTeamEmployeesForAssets = async (req, res) => {
+  try {
+    // Get employees added by this HR manager
+    const teamMembers = await Employee.find({ 
+      addedBy: req.employee._id,
+      isActive: true 
+    }).select('_id name employeeId designation department');
+    
+    // Include HR themselves
+    const hrEmployee = await Employee.findById(req.employee._id)
+      .select('_id name employeeId designation department');
+    
+    const availableEmployees = [...teamMembers];
+    if (hrEmployee) {
+      availableEmployees.push(hrEmployee);
+    }
+
+    res.json({
+      success: true,
+      employees: availableEmployees,
+      teamSize: availableEmployees.length
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 export default {
   createAsset,
   getAllAssets,
@@ -396,5 +606,8 @@ export default {
   assignAsset,
   returnAsset,
   getAssetsByEmployee,
-  getAssetCategories
+  getAssetCategories,
+  getHRTeamAssets,
+  assignAssetToHRTeam,
+  getHRTeamEmployeesForAssets
 };

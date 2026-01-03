@@ -7,7 +7,7 @@ import {
   deleteWorkShift,
   getWorkShiftsWithoutFilters,
 } from "../controllers/workShiftController.js";
-import { authenticateToken, requireHRManager } from "../middlewares/authMiddleware.js";
+import { authenticateToken, requireHRManager, requireWorkshiftAccess } from "../middlewares/authMiddleware.js";
 
 
 
@@ -17,7 +17,7 @@ const router = express.Router();
 router.post("/", authenticateToken, requireHRManager, createWorkShift);
 
 // Anyone authenticated can see shifts
-router.get("/without-filters", authenticateToken, requireHRManager, getWorkShiftsWithoutFilters);
+router.get("/without-filters", authenticateToken, requireWorkshiftAccess, getWorkShiftsWithoutFilters);
 router.get("/", authenticateToken, requireHRManager, getWorkShifts);
 router.get("/:id", authenticateToken, getWorkShiftById);
 

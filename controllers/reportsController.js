@@ -399,11 +399,297 @@ export const getDepartmentReports = async (req, res) => {
   }
 };
 
+// HR Team Employee Reports
+export const getHRTeamEmployeeReports = async (req, res) => {
+  try {
+    // Get employees added by this HR manager
+    const teamMembers = await Employee.find({ addedBy: req.employee._id });
+    const teamMemberIds = teamMembers.map(member => member._id);
+    teamMemberIds.push(req.employee._id); // Include HR's own data
+
+    const totalEmployees = teamMemberIds.length;
+    const activeEmployees = await Employee.countDocuments({ 
+      _id: { $in: teamMemberIds }, 
+      isActive: true 
+    });
+    const inactiveEmployees = totalEmployees - activeEmployees;
+
+    // Department wise count for HR's team
+    const departmentStats = await Employee.aggregate([
+      { $match: { _id: { $in: teamMemberIds } } },
+      {
+        $lookup: {
+          from: 'departments',
+          localField: 'department',
+          foreignField: '_id',
+          as: 'departmentInfo'
+        }
+      },
+      { $unwind: '$departmentInfo' },
+      {
+        $group: {
+          _id: '$departmentInfo.name',
+          count: { $sum: 1 },
+          active: { $sum: { $cond: ['$isActive', 1, 0] } }
+        }
+      }
+    ]);
+
+    // Role wise count for HR's team
+    const roleStats = await Employee.aggregate([
+      { $match: { _id: { $in: teamMemberIds } } },
+      {
+        $group: {
+          _id: '$role',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        summary: {
+          totalEmployees,
+          activeEmployees,
+          inactiveEmployees
+        },
+        departmentStats,
+        roleStats
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// HR Team Payroll Reports
+export const getHRTeamPayrollReports = async (req, res) => {
+  try {
+    const { year = new Date().getFullYear() } = req.query;
+    
+    // Get employees added by this HR manager
+    const teamMembers = await Employee.find({ addedBy: req.employee._id });
+    const teamMemberIds = teamMembers.map(member => member._id);
+    teamMemberIds.push(req.employee._id);
+
+    // Monthly payroll summary for HR's team
+    const monthlyStats = await Payroll.aggregate([
+      {
+        $match: { 
+          year: parseInt(year),
+          employee: { $in: teamMemberIds }
+        }
+      },
+      {
+        $group: {
+          _id: '$month',
+          totalPayrolls: { $sum: 1 },
+          totalGrossSalary: { $sum: '$grossSalary' },
+          totalNetSalary: { $sum: '$netSalary' },
+          avgSalary: { $avg: '$netSalary' }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // Status wise count for HR's team
+    const statusStats = await Payroll.aggregate([
+      { $match: { employee: { $in: teamMemberIds } } },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          totalAmount: { $sum: '$netSalary' }
+        }
+      }
+    ]);
+
+    // Department wise payroll for HR's team
+    const departmentPayroll = await Payroll.aggregate([
+      { $match: { employee: { $in: teamMemberIds } } },
+      {
+        $lookup: {
+          from: 'employees',
+          localField: 'employee',
+          foreignField: '_id',
+          as: 'employeeInfo'
+        }
+      },
+      { $unwind: '$employeeInfo' },
+      {
+        $lookup: {
+          from: 'departments',
+          localField: 'employeeInfo.department',
+          foreignField: '_id',
+          as: 'departmentInfo'
+        }
+      },
+      { $unwind: '$departmentInfo' },
+      {
+        $group: {
+          _id: '$departmentInfo.name',
+          totalAmount: { $sum: '$netSalary' },
+          employeeCount: { $sum: 1 },
+          avgSalary: { $avg: '$netSalary' }
+        }
+      }
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        monthlyStats,
+        statusStats,
+        departmentPayroll,
+        teamSize: teamMemberIds.length
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// HR Team Attendance Reports
+export const getHRTeamAttendanceReports = async (req, res) => {
+  try {
+    // Get employees added by this HR manager
+    const teamMembers = await Employee.find({ 
+      addedBy: req.employee._id, 
+      isActive: true 
+    });
+    const teamMemberIds = teamMembers.map(member => member._id);
+    teamMemberIds.push(req.employee._id);
+
+    const totalEmployees = teamMemberIds.length;
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    
+    const monthlyStats = await Attendance.aggregate([
+      {
+        $match: {
+          date: { $gte: startOfMonth },
+          employee: { $in: teamMemberIds }
+        }
+      },
+      {
+        $group: {
+          _id: { $month: "$date" },
+          present: { $sum: { $cond: [{ $eq: ["$status", "Present"] }, 1, 0] } },
+          absent: { $sum: { $cond: [{ $eq: ["$status", "Absent"] }, 1, 0] } },
+          late: { $sum: { $cond: [{ $eq: ["$status", "Late"] }, 1, 0] } }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+    
+    const todayAttendance = await Attendance.countDocuments({
+      date: { $gte: new Date(today.setHours(0,0,0,0)), $lt: new Date(today.setHours(23,59,59,999)) },
+      status: 'Present',
+      employee: { $in: teamMemberIds }
+    });
+    
+    const lateToday = await Attendance.countDocuments({
+      date: { $gte: new Date(today.setHours(0,0,0,0)), $lt: new Date(today.setHours(23,59,59,999)) },
+      status: 'Late',
+      employee: { $in: teamMemberIds }
+    });
+    
+    // Calculate average attendance
+    const averageAttendance = monthlyStats.length > 0 ? 
+      (monthlyStats.reduce((acc, curr) => acc + curr.present, 0) / (monthlyStats.length * totalEmployees) * 100).toFixed(1) : 0;
+    
+    res.json({
+      success: true,
+      data: {
+        totalEmployees,
+        todayAttendance,
+        lateToday,
+        monthlyStats,
+        averageAttendance,
+        teamSize: teamMemberIds.length
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// HR Team Leave Reports
+export const getHRTeamLeaveReports = async (req, res) => {
+  try {
+    // Get employees added by this HR manager
+    const teamMembers = await Employee.find({ addedBy: req.employee._id });
+    const teamMemberIds = teamMembers.map(member => member._id);
+    teamMemberIds.push(req.employee._id);
+
+    const totalLeaves = await Leave.countDocuments({
+      employee: { $in: teamMemberIds }
+    });
+    
+    const statusStats = await Leave.aggregate([
+      { $match: { employee: { $in: teamMemberIds } } },
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    
+    const typeStats = await Leave.aggregate([
+      { $match: { employee: { $in: teamMemberIds } } },
+      {
+        $group: {
+          _id: "$leaveType",
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    
+    const monthlyStats = await Leave.aggregate([
+      { $match: { employee: { $in: teamMemberIds } } },
+      {
+        $group: {
+          _id: { $month: "$startDate" },
+          approved: { $sum: { $cond: [{ $eq: ["$status", "Approved"] }, 1, 0] } },
+          pending: { $sum: { $cond: [{ $eq: ["$status", "Pending"] }, 1, 0] } },
+          rejected: { $sum: { $cond: [{ $eq: ["$status", "Rejected"] }, 1, 0] } }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+    
+    res.json({
+      success: true,
+      data: {
+        totalLeaves,
+        statusStats,
+        typeStats,
+        monthlyStats,
+        teamSize: teamMemberIds.length
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export default {
   getEmployeeReports,
   getPayrollReports,
   getAssetReports,
   getAttendanceReports,
   getLeaveReports,
-  getDepartmentReports
+  getDepartmentReports,
+  getHRTeamEmployeeReports,
+  getHRTeamPayrollReports,
+  getHRTeamAttendanceReports,
+  getHRTeamLeaveReports
 };

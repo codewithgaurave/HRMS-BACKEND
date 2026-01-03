@@ -41,23 +41,54 @@ export const getAllPayrolls = async (req, res) => {
 
     let query = {};
     
-    // Role-based filtering
+    // Role-based filtering - HR sees only their team's payrolls
     if (req.employee.role === 'HR_Manager') {
-      // HR can see all payrolls
+      // HR can see payrolls of employees they added + their own payroll
+      const teamMembers = await Employee.find({ addedBy: req.employee._id });
+      const teamMemberIds = teamMembers.map(member => member._id);
+      teamMemberIds.push(req.employee._id); // Include own payroll
+      query.employee = { $in: teamMemberIds };
+      console.log('HR Manager - Team Member IDs:', teamMemberIds.length, 'members');
     } else if (req.employee.role === 'Team_Leader') {
       // Team Leaders can see their own payroll and their team members' payrolls
       const teamMembers = await Employee.find({ manager: req.employee._id });
       const teamMemberIds = teamMembers.map(member => member._id);
       teamMemberIds.push(req.employee._id); // Include own payroll
       query.employee = { $in: teamMemberIds };
+      console.log('Team Leader - Team Member IDs:', teamMemberIds.length, 'members');
     } else {
       // Regular employees can only see their own payroll
       query.employee = req.employee._id;
+      console.log('Employee - Own ID only');
     }
+    
+    console.log('Payroll Query:', JSON.stringify(query, null, 2));
+    
+    // Additional filters (only apply if employee filter is already set)
     if (month) query.month = month;
     if (year) query.year = year;
     if (status) query.status = status;
-    if (employeeId) query.employee = employeeId;
+    if (employeeId && query.employee) {
+      // Only allow if the requested employee is in the allowed list
+      if (query.employee.$in) {
+        const isAllowed = query.employee.$in.some(id => id.toString() === employeeId);
+        if (isAllowed) {
+          query.employee = employeeId;
+        } else {
+          return res.status(403).json({
+            success: false,
+            message: "Access denied. You can only view payrolls of employees you manage."
+          });
+        }
+      } else if (query.employee.toString() === employeeId) {
+        query.employee = employeeId;
+      } else {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied. You can only view your own payroll."
+        });
+      }
+    }
 
     const sort = {};
     sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
@@ -172,12 +203,42 @@ export const deletePayroll = async (req, res) => {
   }
 };
 
-// Generate Payroll for All Employees
+// Generate Payroll for All Employees (HR generates only for their team)
 export const generatePayrollForAll = async (req, res) => {
   try {
     const { month, year } = req.body;
     
-    const employees = await Employee.find({ isActive: true });
+    // Get employees based on role
+    let employees = [];
+    if (req.employee.role === 'HR_Manager') {
+      // HR can generate payroll for employees they added
+      employees = await Employee.find({ 
+        addedBy: req.employee._id, 
+        isActive: true 
+      });
+      // Also include themselves
+      const hrEmployee = await Employee.findById(req.employee._id);
+      if (hrEmployee && hrEmployee.isActive) {
+        employees.push(hrEmployee);
+      }
+    } else if (req.employee.role === 'Team_Leader') {
+      // Team Leader can generate for their team members
+      employees = await Employee.find({ 
+        manager: req.employee._id, 
+        isActive: true 
+      });
+      // Also include themselves
+      const tlEmployee = await Employee.findById(req.employee._id);
+      if (tlEmployee && tlEmployee.isActive) {
+        employees.push(tlEmployee);
+      }
+    } else {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Only HR Managers and Team Leaders can generate payrolls.'
+      });
+    }
+    
     const payrolls = [];
 
     for (const employee of employees) {
@@ -226,9 +287,93 @@ export const generatePayrollForAll = async (req, res) => {
   }
 };
 
+// Get HR Team Payrolls (specific endpoint for HR managers)
+export const getHRTeamPayrolls = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      month,
+      year,
+      status,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    // Only HR Managers can access this endpoint
+    if (req.employee.role !== 'HR_Manager') {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Only HR Managers can access this endpoint."
+      });
+    }
+
+    // Get employees added by this HR manager
+    const teamMembers = await Employee.find({ 
+      addedBy: req.employee._id,
+      isActive: true 
+    }).select('_id name employeeId');
+    
+    console.log('HR Team Members Found:', teamMembers.length);
+    
+    const teamMemberIds = teamMembers.map(member => member._id);
+    teamMemberIds.push(req.employee._id); // Include HR's own payroll
+    
+    console.log('Team Member IDs for payroll:', teamMemberIds);
+
+    let query = {
+      employee: { $in: teamMemberIds }
+    };
+    
+    // Additional filters
+    if (month) query.month = month;
+    if (year) query.year = year;
+    if (status) query.status = status;
+
+    console.log('Final Payroll Query:', JSON.stringify(query, null, 2));
+
+    const sort = {};
+    sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
+
+    const skip = (page - 1) * limit;
+    
+    const payrolls = await Payroll.find(query)
+      .populate('employee', 'name employeeId department designation')
+      .populate('createdBy', 'name employeeId')
+      .sort(sort)
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const totalCount = await Payroll.countDocuments(query);
+    const totalPages = Math.ceil(totalCount / limit);
+
+    console.log('Payrolls Found:', payrolls.length, 'Total Count:', totalCount);
+
+    res.json({
+      success: true,
+      payrolls,
+      teamMembers: teamMembers.length,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages,
+        totalCount,
+        hasNext: page < totalPages,
+        hasPrev: page > 1
+      }
+    });
+  } catch (error) {
+    console.error('Get HR Team Payrolls Error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 export default {
   createPayroll,
   getAllPayrolls,
+  getHRTeamPayrolls,
   getPayrollById,
   updatePayroll,
   deletePayroll,

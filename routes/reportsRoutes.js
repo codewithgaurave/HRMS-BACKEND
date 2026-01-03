@@ -6,13 +6,24 @@ import {
   getAssetReports,
   getAttendanceReports,
   getLeaveReports,
-  getDepartmentReports
+  getDepartmentReports,
+  getHRTeamEmployeeReports,
+  getHRTeamPayrollReports,
+  getHRTeamAttendanceReports,
+  getHRTeamLeaveReports
 } from '../controllers/reportsController.js';
 
 const router = express.Router();
 
 router.use(authenticateToken);
 
+// HR Team specific routes (must come before general routes)
+router.get('/team/employees', getHRTeamEmployeeReports);
+router.get('/team/payroll', getHRTeamPayrollReports);
+router.get('/team/attendance', getHRTeamAttendanceReports);
+router.get('/team/leaves', getHRTeamLeaveReports);
+
+// General routes
 router.get('/employees', getEmployeeReports);
 router.get('/payroll', getPayrollReports);
 router.get('/assets', getAssetReports);

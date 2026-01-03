@@ -5,7 +5,6 @@ const employmentStatusSchema = new mongoose.Schema(
     title: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
     },
     description: {
@@ -21,9 +20,17 @@ const employmentStatusSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Employee",
     },
+    hrId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Employee",
+      required: true,
+    },
   },
   { timestamps: true }
 );
+
+// Compound index to ensure unique employment status titles per HR
+employmentStatusSchema.index({ title: 1, hrId: 1 }, { unique: true });
 
 const EmploymentStatus = mongoose.model("EmploymentStatus", employmentStatusSchema);
 export default EmploymentStatus;
