@@ -1189,6 +1189,94 @@ const getHRAnalytics = async (period) => {
   };
 };
 
+// @desc    Debug dashboard data
+// @route   GET /api/dashboard/debug
+// @access  Private
+export const debugDashboardData = async (req, res) => {
+  try {
+    const { role, _id: employeeId } = req.employee;
+    console.log(`🔍 Debug Dashboard - Role: ${role}, ID: ${employeeId}`);
+    
+    // Basic counts
+    const totalEmployees = await Employee.countDocuments({});
+    const activeEmployees = await Employee.countDocuments({ isActive: true });
+    const totalAttendance = await Attendance.countDocuments({});
+    const totalLeaves = await Leave.countDocuments({});
+    
+    console.log(`📊 Basic Counts:`);
+    console.log(`- Total Employees: ${totalEmployees}`);
+    console.log(`- Active Employees: ${activeEmployees}`);
+    console.log(`- Total Attendance: ${totalAttendance}`);
+    console.log(`- Total Leaves: ${totalLeaves}`);
+    
+    // Role-specific data
+    let roleSpecificData = {};
+    
+    if (role === 'HR_Manager') {
+      const hrEmployees = await Employee.find({ addedBy: employeeId });
+      const hrEmployeeIds = hrEmployees.map(emp => emp._id);
+      
+      const hrAttendance = await Attendance.countDocuments({ employee: { $in: hrEmployeeIds } });
+      const hrLeaves = await Leave.countDocuments({ employee: { $in: hrEmployeeIds } });
+      
+      roleSpecificData = {
+        managedEmployees: hrEmployees.length,
+        managedAttendance: hrAttendance,
+        managedLeaves: hrLeaves,
+        employeeIds: hrEmployeeIds.slice(0, 5) // First 5 IDs for debugging
+      };
+      
+      console.log(`👥 HR Manager Data:`);
+      console.log(`- Managed Employees: ${hrEmployees.length}`);
+      console.log(`- Managed Attendance Records: ${hrAttendance}`);
+      console.log(`- Managed Leave Records: ${hrLeaves}`);
+    }
+    
+    // Today's data
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const todayAttendance = await Attendance.find({ date: today });
+    const todayStats = {
+      total: todayAttendance.length,
+      byStatus: {}
+    };
+    
+    todayAttendance.forEach(att => {
+      todayStats.byStatus[att.status] = (todayStats.byStatus[att.status] || 0) + 1;
+    });
+    
+    console.log(`📅 Today's Attendance:`);
+    console.log(`- Total Records: ${todayStats.total}`);
+    console.log(`- By Status:`, todayStats.byStatus);
+    
+    res.json({
+      success: true,
+      debug: {
+        userRole: role,
+        userId: employeeId,
+        basicCounts: {
+          totalEmployees,
+          activeEmployees,
+          totalAttendance,
+          totalLeaves
+        },
+        roleSpecificData,
+        todayStats,
+        timestamp: new Date().toISOString()
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Debug Dashboard Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Debug failed',
+      error: error.message
+    });
+  }
+};
+
 // @desc    Get comprehensive dashboard stats and trends
 // @route   GET /api/dashboard/stats
 // @access  Private (HR_Manager, Admin, Team_Leader, Employee)
@@ -1285,9 +1373,17 @@ const getHRDashboardStats = async (today, hrId) => {
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   const startOfYear = new Date(today.getFullYear(), 0, 1);
 
-  // Get HR-specific employees
-  const hrEmployees = await Employee.find({ addedBy: hrId, isActive: true }).select('_id');
+  // Get HR-specific employees - include self if no employees added
+  let hrEmployees = await Employee.find({ addedBy: hrId, isActive: true }).select('_id');
+  
+  // If no employees found, include the HR manager themselves
+  if (hrEmployees.length === 0) {
+    hrEmployees = await Employee.find({ _id: hrId, isActive: true }).select('_id');
+    console.log('👥 No managed employees found, including HR self:', hrEmployees.length);
+  }
+  
   const hrEmployeeIds = hrEmployees.map(emp => emp._id);
+  console.log('📊 HR Employee IDs:', hrEmployeeIds.length);
 
   // Get all data in parallel for better performance
   const [
@@ -2378,7 +2474,10 @@ const getTeamLeaderAnalytics = async (period, teamLeaderId) => {
   };
 };
 
+
+
 export default {
   getDashboardStats,
-  getDashboardAnalytics
+  getDashboardAnalytics,
+  debugDashboardData
 };

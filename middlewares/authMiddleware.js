@@ -52,13 +52,13 @@ export const requireTeamLeader = (req, res, next) => {
 // Check if user can access employee data
 export const canAccessEmployee = async (req, res, next) => {
   try {
-    const targetEmployeeId = req.employee.id;
+    const targetEmployeeId = req.params.employeeId;
     
     // HR can access all employees
     if (req.employee.role === 'HR_Manager') {
       return next();
     }
-    console.log(targetEmployeeId)    
+    
     const targetEmployee = await Employee.findById(targetEmployeeId);
     
     if (!targetEmployee) {
@@ -67,7 +67,6 @@ export const canAccessEmployee = async (req, res, next) => {
     
     // Team Leaders can access their team members
     if (req.employee.role === 'Team_Leader') {
-      // Check if the target employee reports to this team leader
       if (targetEmployee.manager && targetEmployee.manager.toString() === req.employee._id.toString()) {
         return next();
       }
@@ -111,4 +110,16 @@ export const requireWorkshiftAccess = (req, res, next) => {
     });
   }
   next();
+};
+
+// Generic role-based authorization middleware
+export const requireRole = (allowedRoles) => {
+  return (req, res, next) => {
+    if (!allowedRoles.includes(req.employee.role)) {
+      return res.status(403).json({ 
+        message: 'Access denied. Insufficient permissions.' 
+      });
+    }
+    next();
+  };
 };

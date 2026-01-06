@@ -2072,14 +2072,10 @@ const calculateImprovement = (weeklyTrends) => {
 };
 
 export const getEmployeeAttendances = async (req, res) => {
-  // console.log("query ", req.query)
   try {
     const { employeeId } = req.params;
     const {
-      // Common parameters
-      type = 'records', // 'records', 'summary', 'calendar'
-
-      // Records parameters
+      type = 'records',
       startDate,
       endDate,
       status,
@@ -2087,32 +2083,18 @@ export const getEmployeeAttendances = async (req, res) => {
       limit = 30,
       sortBy = "date",
       sortOrder = "desc",
-
-      // Summary parameters
-      period = 'today',
-
-      // Calendar parameters
+      period = 'month',
       year = new Date().getFullYear(),
       month = new Date().getMonth() + 1
     } = req.query;
 
-    // Validate employeeId
-    if (!employeeId) {
+    if (!employeeId || !mongoose.Types.ObjectId.isValid(employeeId)) {
       return res.status(400).json({
         success: false,
-        message: "Employee ID is required"
+        message: "Invalid Employee ID"
       });
     }
 
-    // Validate mongoose ID
-    if (!mongoose.Types.ObjectId.isValid(employeeId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid Employee ID format"
-      });
-    }
-
-    // Verify employee exists
     const employee = await Employee.findById(employeeId).select('name employeeId');
     if (!employee) {
       return res.status(404).json({
@@ -2121,43 +2103,11 @@ export const getEmployeeAttendances = async (req, res) => {
       });
     }
 
-    // Check permissions - role-based access control
-    let isAuthorized = false;
-    
-    if (req.employee.role === "HR_Manager") {
-      // HR can access employees they added
-      if (req.employee._id.toString() === employeeId) {
-        isAuthorized = true;
-      } else {
-        const addedEmployee = await Employee.findOne({ 
-          _id: employeeId,
-          addedBy: req.employee._id,
-          isActive: true 
-        });
-        isAuthorized = !!addedEmployee;
-      }
-    } else if (req.employee.role === "Team_Leader") {
-      // Team Leader can access their own and team members' attendance
-      if (req.employee._id.toString() === employeeId) {
-        isAuthorized = true;
-      } else {
-        // Check if employee is in their team
-        const teamMember = await Employee.findOne({ 
-          _id: employeeId,
-          manager: req.employee._id,
-          isActive: true 
-        });
-        isAuthorized = !!teamMember;
-      }
-    } else {
-      // Regular employees can only access their own attendance
-      isAuthorized = req.employee._id.toString() === employeeId;
-    }
-
-    if (!isAuthorized) {
+    // Authorization: HR can access all, others only their own data
+    if (req.employee.role !== 'HR_Manager' && req.employee._id.toString() !== employeeId) {
       return res.status(403).json({
         success: false,
-        message: "Access denied. You can only view attendance records of yourself or your team members."
+        message: "Access denied. You can only view your own attendance records."
       });
     }
 

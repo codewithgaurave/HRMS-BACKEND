@@ -23,6 +23,8 @@ import payrollRoutes from './routes/payrollRoutes.js';
 import reportsRoutes from './routes/reportsRoutes.js';
 import assetRequestRoutes from './routes/assetRequestRoutes.js';
 import noticeRoutes from './routes/noticeRoutes.js';
+import hrAnalyticsRoutes from './routes/hrAnalyticsRoutes.js';
+import hrSummaryRoutes from './routes/hrSummaryRoutes.js';
 
 
 
@@ -74,6 +76,9 @@ app.use("/api/payroll", payrollRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/asset-requests", assetRequestRoutes);
 app.use("/api/notices", noticeRoutes);
+app.use("/api/hr-analytics", hrAnalyticsRoutes);
+app.use("/api/hr-summary", hrSummaryRoutes);
+
 
 
 

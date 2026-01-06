@@ -1,5 +1,5 @@
 import express from "express";
-import { authenticateToken, requireHRManager, requireTeamLeader } from "../middlewares/authMiddleware.js";
+import { authenticateToken, requireHRManager, requireTeamLeader, canAccessEmployee } from "../middlewares/authMiddleware.js";
 import { 
   punchIn, 
   punchOut, 
@@ -43,7 +43,7 @@ router.get("/my-summary", getMyAttendanceSummary);
 router.get("/my-calendar", getMyAttendanceCalendar);
 
 // get attendance details of en employee
-router.get("/:employeeId/details", requireTeamLeader, getEmployeeAttendances);
+router.get("/:employeeId/details", authenticateToken, getEmployeeAttendances);
 
 // Update your routes to include the comprehensive endpoint
 router.get("/get-my-attendance", getMyAttendanceComprehensive);

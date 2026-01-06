@@ -27,7 +27,7 @@ router.get('/available-types', authenticateToken, (req, res) => {
 
 // Get leaves
 router.get("/", authenticateToken, requireHRManager,  getLeaves);
-router.get("/my-teams-leaves", authenticateToken, canAccessEmployee,  getMyAndTeamLeaves);
+router.get("/my-teams-leaves", authenticateToken, requireTeamLeader, getMyAndTeamLeaves);
 router.get("/my-leaves", authenticateToken, getMyLeaves);
 router.get('/balance', authenticateToken, getLeaveBalance);
 router.get('/balance/:employeeId', authenticateToken, getLeaveBalance);
