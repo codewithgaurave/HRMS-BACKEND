@@ -125,6 +125,7 @@ export const registerEmployee = async (req, res) => {
       panNumber,
       bankDetails,
       profilePicture,
+      allowedPunchInRange,
     } = req.body;
 
     //  Check unique constraints (email, mobile)
@@ -210,6 +211,7 @@ export const registerEmployee = async (req, res) => {
       panNumber,
       bankDetails,
       profilePicture,
+      allowedPunchInRange: allowedPunchInRange || 500,
     });
 
     await newEmployee.save();
@@ -1378,7 +1380,8 @@ export const updateEmploymentDetails = async (req, res) => {
       salary,
       dateOfJoining,
       dateOfLeaving,
-      leavingReason
+      leavingReason,
+      allowedPunchInRange
     } = req.body;
 
     // Check if employee exists
@@ -1428,6 +1431,7 @@ export const updateEmploymentDetails = async (req, res) => {
     if (dateOfJoining) updates.dateOfJoining = dateOfJoining;
     if (dateOfLeaving !== undefined) updates.dateOfLeaving = dateOfLeaving;
     if (leavingReason !== undefined) updates.leavingReason = leavingReason;
+    if (allowedPunchInRange !== undefined) updates.allowedPunchInRange = allowedPunchInRange;
 
     const updatedEmployee = await Employee.findByIdAndUpdate(
       id,

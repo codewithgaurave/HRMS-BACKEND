@@ -84,13 +84,14 @@ const calculateDayStatus = async (employee, date) => {
 };
 
 // Validate if employee is within office location radius
-const validateOfficeLocation = async (lat, lng, officeLocationId) => {
+const validateOfficeLocation = async (lat, lng, officeLocationId, employeeId) => {
   try {
     console.log('=== LOCATION VALIDATION DEBUG START ===');
     console.log('1. Input Parameters:');
     console.log('   - User Latitude:', lat);
     console.log('   - User Longitude:', lng);
     console.log('   - Office Location ID:', officeLocationId);
+    console.log('   - Employee ID:', employeeId);
     console.log('   - User Lat/Lng Type:', typeof lat, typeof lng);
 
     // Validate input parameters
@@ -133,12 +134,19 @@ const validateOfficeLocation = async (lat, lng, officeLocationId) => {
       return false;
     }
 
+    // Get employee's allowed range
+    const employee = await Employee.findById(employeeId).select('allowedPunchInRange');
+    const allowedRange = employee?.allowedPunchInRange || 500;
+
+    console.log('3. Employee Range Settings:');
+    console.log('   - Allowed Range:', allowedRange, 'meters');
+
     // Calculate distance between two points using Haversine formula
     const R = 6371000; // Earth's radius in meters
     const dLat = (lat - office.latitude) * Math.PI / 180;
     const dLng = (lng - office.longitude) * Math.PI / 180;
 
-    console.log('3. Distance Calculation:');
+    console.log('4. Distance Calculation:');
     console.log('   - dLat (radians):', dLat);
     console.log('   - dLng (radians):', dLng);
 
@@ -152,11 +160,11 @@ const validateOfficeLocation = async (lat, lng, officeLocationId) => {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     const distance = R * c; // Distance in meters
 
-    console.log('4. Result:');
+    console.log('5. Result:');
     console.log('   - Calculated distance:', distance.toFixed(2), 'meters');
-    console.log('   - Maximum allowed distance: 500 meters');
-    console.log('   - Is within range?', distance <= 500);
-    console.log('   - Distance difference:', (distance - 500).toFixed(2), 'meters');
+    console.log('   - Maximum allowed distance:', allowedRange, 'meters');
+    console.log('   - Is within range?', distance <= allowedRange);
+    console.log('   - Distance difference:', (distance - allowedRange).toFixed(2), 'meters');
 
     // Convert distance to kilometers for better understanding
     const distanceKm = distance / 1000;
@@ -166,8 +174,8 @@ const validateOfficeLocation = async (lat, lng, officeLocationId) => {
     const walkingTimeMinutes = (distance / 5000) * 60;
     console.log('   - Approx walking time:', walkingTimeMinutes.toFixed(1), 'minutes');
 
-    // Allow within 500 meters radius (as per your update)
-    const isWithinRange = distance <= 10000;
+    // Allow within employee's allowed range
+    const isWithinRange = distance <= allowedRange;
     
     console.log('=== LOCATION VALIDATION DEBUG END ===');
     console.log('Final Result:', isWithinRange ? '✅ WITHIN RANGE' : '❌ OUT OF RANGE');
@@ -270,7 +278,8 @@ export const punchIn = async (req, res) => {
     const isWithinOffice = await validateOfficeLocation(
       parseFloat(coordinates.latitude),
       parseFloat(coordinates.longitude),
-      employee.officeLocation._id
+      employee.officeLocation._id,
+      employeeId
     );
     
     console.log('7. Validation Result:', isWithinOffice);
@@ -419,7 +428,8 @@ export const punchOut = async (req, res) => {
     const isWithinOffice = await validateOfficeLocation(
       coordinates.latitude,
       coordinates.longitude,
-      attendance.officeLocation
+      attendance.officeLocation,
+      employeeId
     );
 
         if (!isWithinOffice) {
@@ -520,7 +530,8 @@ export const punchInByHr = async (req, res) => {
     const isWithinOffice = await validateOfficeLocation(
       officeLocation.latitude,
       officeLocation.longitude,
-      employee.officeLocation
+      employee.officeLocation,
+      employeeId
     );
 
         if (!isWithinOffice) {
@@ -624,7 +635,8 @@ export const punchOutByHr = async (req, res) => {
     const isWithinOffice = await validateOfficeLocation(
       officeLocation.latitude,
       officeLocation.longitude,
-      attendance.officeLocation
+      attendance.officeLocation,
+      employeeId
     );
 
         if (!isWithinOffice) {

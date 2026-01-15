@@ -79,6 +79,13 @@ coordinates: {
   longitude: { type: Number, default: null },
 },
 
+allowedPunchInRange: {
+  type: Number,
+  default: 500,
+  min: 10,
+  max: 10000
+},
+
 
   // Employment Details - Updated with References
   department: {
