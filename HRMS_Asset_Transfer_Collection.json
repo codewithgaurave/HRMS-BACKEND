@@ -1,0 +1,410 @@
+{
+  "info": {
+    "name": "HRMS Asset Transfer & History APIs",
+    "description": "Complete collection for Employee Asset Transfer and History tracking",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "your_jwt_token_here",
+      "type": "string"
+    },
+    {
+      "key": "assetId",
+      "value": "674b5678901234abcdef5678",
+      "type": "string"
+    },
+    {
+      "key": "employeeId",
+      "value": "674a1234567890abcdef1234",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Employee Transfer Asset",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"toEmployeeId\": \"{{employeeId}}\",\n  \"transferType\": \"transfer\",\n  \"reason\": \"Project requirement - need laptop for client demo\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/assets/{{assetId}}/employee-transfer",
+          "host": ["{{baseUrl}}"],
+          "path": ["assets", "{{assetId}}", "employee-transfer"]
+        },
+        "description": "Employee apne asset ko dusre employee ko transfer kar sakta hai (same HR ke under)"
+      },
+      "response": []
+    },
+    {
+      "name": "2. Employee Share Asset",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"toEmployeeId\": \"{{employeeId}}\",\n  \"transferType\": \"share\",\n  \"reason\": \"Sharing for collaborative work\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/assets/{{assetId}}/employee-transfer",
+          "host": ["{{baseUrl}}"],
+          "path": ["assets", "{{assetId}}", "employee-transfer"]
+        },
+        "description": "Asset share karo - dono employees ke paas rahega"
+      },
+      "response": []
+    },
+    {
+      "name": "3. Get My Asset History",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/assets/history/my",
+          "host": ["{{baseUrl}}"],
+          "path": ["assets", "history", "my"]
+        },
+        "description": "Employee apni asset history dekh sakta hai - kitne assets use kiye, kisko transfer kiya"
+      },
+      "response": []
+    },
+    {
+      "name": "4. Get All Assets History (HR Panel)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/assets/history/all?startDate=2024-01-01&category=Electronics",
+          "host": ["{{baseUrl}}"],
+          "path": ["assets", "history", "all"],
+          "query": [
+            {
+              "key": "startDate",
+              "value": "2024-01-01",
+              "description": "Filter by start date (optional)"
+            },
+            {
+              "key": "endDate",
+              "value": "2024-12-31",
+              "description": "Filter by end date (optional)",
+              "disabled": true
+            },
+            {
+              "key": "employeeId",
+              "value": "{{employeeId}}",
+              "description": "Filter by specific employee (optional)",
+              "disabled": true
+            },
+            {
+              "key": "category",
+              "value": "Electronics",
+              "description": "Filter by asset category (optional)"
+            }
+          ]
+        },
+        "description": "HR sabki asset history dekh sakta hai - complete tracking"
+      },
+      "response": []
+    },
+    {
+      "name": "5. Get Single Asset History",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/assets/{{assetId}}/history",
+          "host": ["{{baseUrl}}"],
+          "path": ["assets", "{{assetId}}", "history"]
+        },
+        "description": "Ek specific asset ki complete history - kisne use kiya, kitne din use kiya"
+      },
+      "response": []
+    },
+    {
+      "name": "6. Get My Transferable Assets",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/assets/my/transferable",
+          "host": ["{{baseUrl}}"],
+          "path": ["assets", "my", "transferable"]
+        },
+        "description": "Employee apne paas ke assets dekh sakta hai jo transfer kar sakta hai"
+      },
+      "response": []
+    },
+    {
+      "name": "7. Get Colleagues for Transfer",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/assets/colleagues/transfer",
+          "host": ["{{baseUrl}}"],
+          "path": ["assets", "colleagues", "transfer"]
+        },
+        "description": "Same HR ke under ke colleagues list - jinko asset transfer kar sakte ho"
+      },
+      "response": []
+    },
+    {
+      "name": "8. HR Assign Asset",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"employeeId\": \"{{employeeId}}\",\n  \"forceAssign\": false\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/assets/{{assetId}}/assign",
+          "host": ["{{baseUrl}}"],
+          "path": ["assets", "{{assetId}}", "assign"]
+        },
+        "description": "HR/Team Leader asset assign kar sakta hai"
+      },
+      "response": []
+    },
+    {
+      "name": "9. Return Asset",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"employeeId\": \"{{employeeId}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/assets/{{assetId}}/return",
+          "host": ["{{baseUrl}}"],
+          "path": ["assets", "{{assetId}}", "return"]
+        },
+        "description": "Asset return karo - specific employee se ya sabse"
+      },
+      "response": []
+    },
+    {
+      "name": "10. Get All Assets",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/assets?page=1&limit=10&search=&category=&status=",
+          "host": ["{{baseUrl}}"],
+          "path": ["assets"],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "10"
+            },
+            {
+              "key": "search",
+              "value": ""
+            },
+            {
+              "key": "category",
+              "value": ""
+            },
+            {
+              "key": "status",
+              "value": ""
+            }
+          ]
+        },
+        "description": "Saare assets list with pagination and filters"
+      },
+      "response": []
+    },
+    {
+      "name": "11. Get Asset by ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/assets/{{assetId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["assets", "{{assetId}}"]
+        },
+        "description": "Specific asset ki details"
+      },
+      "response": []
+    },
+    {
+      "name": "12. Create Asset",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Dell Laptop\",\n  \"category\": \"Electronics\",\n  \"brand\": \"Dell\",\n  \"model\": \"Latitude 5420\",\n  \"serialNumber\": \"DL123456789\",\n  \"purchaseDate\": \"2024-01-01\",\n  \"purchasePrice\": 65000,\n  \"condition\": \"New\",\n  \"status\": \"Available\",\n  \"description\": \"14-inch laptop with i5 processor\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/assets",
+          "host": ["{{baseUrl}}"],
+          "path": ["assets"]
+        },
+        "description": "Naya asset create karo"
+      },
+      "response": []
+    },
+    {
+      "name": "13. Update Asset",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"condition\": \"Good\",\n  \"description\": \"Updated description\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/assets/{{assetId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["assets", "{{assetId}}"]
+        },
+        "description": "Asset update karo"
+      },
+      "response": []
+    },
+    {
+      "name": "14. Delete Asset",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/assets/{{assetId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["assets", "{{assetId}}"]
+        },
+        "description": "Asset delete karo (sirf unassigned assets)"
+      },
+      "response": []
+    },
+    {
+      "name": "15. Get Asset Categories",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/assets/categories",
+          "host": ["{{baseUrl}}"],
+          "path": ["assets", "categories"]
+        },
+        "description": "Saare asset categories list"
+      },
+      "response": []
+    }
+  ]
+}

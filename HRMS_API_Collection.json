@@ -1,0 +1,320 @@
+{
+  "info": {
+    "name": "HRMS Backend API Collection",
+    "description": "Complete API collection for HRMS Backend System",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication",
+      "item": [
+        {
+          "name": "Login Employee",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"hr@company.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/employees/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["employees", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Employee Management",
+      "item": [
+        {
+          "name": "Register Employee",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": {\n    \"first\": \"John\",\n    \"last\": \"Doe\"\n  },\n  \"email\": \"john@company.com\",\n  \"mobile\": \"9876543210\",\n  \"password\": \"password123\",\n  \"gender\": \"Male\",\n  \"department\": \"departmentId\",\n  \"designation\": \"designationId\",\n  \"employmentStatus\": \"statusId\",\n  \"officeLocation\": \"locationId\",\n  \"workShift\": \"shiftId\",\n  \"salary\": 50000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/employees/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["employees", "register"]
+            }
+          }
+        },
+        {
+          "name": "Get All Employees",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/employees?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["employees"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Employee By ID",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/employees/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["employees", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/employees/my-profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["employees", "my-profile"]
+            }
+          }
+        },
+        {
+          "name": "Update Employee",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": {\n    \"first\": \"John\",\n    \"last\": \"Updated\"\n  },\n  \"mobile\": \"9876543211\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/employees/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["employees", ":id"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Attendance Management",
+      "item": [
+        {
+          "name": "Punch In",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coordinates\": {\n    \"latitude\": 28.6139,\n    \"longitude\": 77.2090\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/attendance/punch-in",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance", "punch-in"]
+            }
+          }
+        },
+        {
+          "name": "Punch Out",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coordinates\": {\n    \"latitude\": 28.6139,\n    \"longitude\": 77.2090\n  },\n  \"earlyDepartureReason\": \"Medical emergency\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/attendance/punch-out",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance", "punch-out"]
+            }
+          }
+        },
+        {
+          "name": "Get Today Attendance",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/attendance/today",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance", "today"]
+            }
+          }
+        },
+        {
+          "name": "Get My Attendances",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/attendance/my-attendances?page=1&limit=30",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance", "my-attendances"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "30"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Attendance Summary",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/attendance/summary",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance", "summary"]
+            }
+          }
+        },
+        {
+          "name": "Get All Attendance (HR)",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/attendance?page=1&limit=30",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "30"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Leave Management",
+      "item": [
+        {
+          "name": "Create Leave Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"leaveType\": \"Casual\",\n  \"startDate\": \"2024-02-01\",\n  \"endDate\": \"2024-02-03\",\n  \"reason\": \"Personal work\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/leaves",
+              "host": ["{{baseUrl}}"],
+              "path": ["leaves"]
+            }
+          }
+        },
+        {
+          "name": "Get My Leaves",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/leaves/my-leaves",
+              "host": ["{{baseUrl}}"],
+              "path": ["leaves", "my-leaves"]
+            }
+          }
+        },
+        {
+          "name": "Get All Leaves (HR/Team Leader)",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/leaves?status=Pending&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["leaves"],
+              "query": [
+                {"key": "status", "value": "Pending"},
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Approve/Reject Leave",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Approved\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/leaves/:id/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["leaves", ":id", "status"]
+            }
+          }
+        },
+        {
+          "name": "Get Leave Balance",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/leaves/balance/:employeeId",
+              "host": ["{{baseUrl}}"],
+              "path": ["leaves", "balance", ":employeeId"]
+            }
+          }
+        },
+        {
+          "name": "Cancel Leave",
+          "request": {
+            "method": "DELETE",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/leaves/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["leaves", ":id"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

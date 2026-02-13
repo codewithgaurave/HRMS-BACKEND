@@ -50,6 +50,10 @@ const assetSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Employee'
     },
+    assignedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Employee'
+    },
     assignedDate: {
       type: Date,
       default: Date.now
@@ -60,6 +64,11 @@ const assetSchema = new mongoose.Schema({
     isActive: {
       type: Boolean,
       default: true
+    },
+    transferType: {
+      type: String,
+      enum: ['assign', 'transfer', 'share'],
+      default: 'assign'
     }
   }],
   location: {

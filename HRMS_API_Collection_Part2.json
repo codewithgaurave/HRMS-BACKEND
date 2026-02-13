@@ -1,0 +1,321 @@
+{
+  "info": {
+    "name": "HRMS API Collection - Part 2",
+    "description": "Dashboard, Department, Designation, and more APIs"
+  },
+  "item": [
+    {
+      "name": "5. Dashboard",
+      "item": [
+        {
+          "name": "Get Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["dashboard", "stats"]
+            }
+          }
+        },
+        {
+          "name": "Get Dashboard Analytics",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/analytics?period=month",
+              "host": ["{{baseUrl}}"],
+              "path": ["dashboard", "analytics"],
+              "query": [{"key": "period", "value": "month"}]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Department Management",
+      "item": [
+        {
+          "name": "Create Department",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"IT Department\",\n  \"description\": \"Information Technology\",\n  \"status\": \"Active\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/departments",
+              "host": ["{{baseUrl}}"],
+              "path": ["departments"]
+            }
+          }
+        },
+        {
+          "name": "Get All Departments",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/departments",
+              "host": ["{{baseUrl}}"],
+              "path": ["departments"]
+            }
+          }
+        },
+        {
+          "name": "Update Department",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"IT Department Updated\",\n  \"description\": \"Updated description\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/departments/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["departments", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Delete Department",
+          "request": {
+            "method": "DELETE",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/departments/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["departments", ":id"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Designation Management",
+      "item": [
+        {
+          "name": "Create Designation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Senior Developer\",\n  \"description\": \"Senior Software Developer\",\n  \"status\": \"Active\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/designation",
+              "host": ["{{baseUrl}}"],
+              "path": ["designation"]
+            }
+          }
+        },
+        {
+          "name": "Get All Designations",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/designation",
+              "host": ["{{baseUrl}}"],
+              "path": ["designation"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Office Location",
+      "item": [
+        {
+          "name": "Create Office Location",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"officeName\": \"Head Office\",\n  \"officeAddress\": \"123 Main Street, City\",\n  \"officeType\": \"Head Office\",\n  \"latitude\": 28.6139,\n  \"longitude\": 77.2090\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/office-locations",
+              "host": ["{{baseUrl}}"],
+              "path": ["office-locations"]
+            }
+          }
+        },
+        {
+          "name": "Get All Office Locations",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/office-locations",
+              "host": ["{{baseUrl}}"],
+              "path": ["office-locations"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Work Shift",
+      "item": [
+        {
+          "name": "Create Work Shift",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Morning Shift\",\n  \"startTime\": \"09:00\",\n  \"endTime\": \"18:00\",\n  \"status\": \"Active\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/workshift",
+              "host": ["{{baseUrl}}"],
+              "path": ["workshift"]
+            }
+          }
+        },
+        {
+          "name": "Get All Work Shifts",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/workshift",
+              "host": ["{{baseUrl}}"],
+              "path": ["workshift"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Leave Policies",
+      "item": [
+        {
+          "name": "Create Leave Policy",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"leaveType\": \"Casual\",\n  \"maxLeavesPerYear\": 12,\n  \"genderRestriction\": \"All\",\n  \"carryForward\": true,\n  \"description\": \"Casual leave policy\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/leave-policies",
+              "host": ["{{baseUrl}}"],
+              "path": ["leave-policies"]
+            }
+          }
+        },
+        {
+          "name": "Get All Leave Policies",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/leave-policies",
+              "host": ["{{baseUrl}}"],
+              "path": ["leave-policies"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "11. Announcements",
+      "item": [
+        {
+          "name": "Create Announcement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Holiday Notice\",\n  \"description\": \"Office will be closed on 26th Jan\",\n  \"priority\": \"High\",\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/announcements",
+              "host": ["{{baseUrl}}"],
+              "path": ["announcements"]
+            }
+          }
+        },
+        {
+          "name": "Get All Announcements",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/announcements",
+              "host": ["{{baseUrl}}"],
+              "path": ["announcements"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "12. Events",
+      "item": [
+        {
+          "name": "Create Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Team Meeting\",\n  \"description\": \"Monthly team meeting\",\n  \"eventType\": \"Meeting\",\n  \"startDate\": \"2024-02-15T10:00:00Z\",\n  \"endDate\": \"2024-02-15T11:00:00Z\",\n  \"officeLocation\": \"locationId\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/events",
+              "host": ["{{baseUrl}}"],
+              "path": ["events"]
+            }
+          }
+        },
+        {
+          "name": "Get All Events",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/events",
+              "host": ["{{baseUrl}}"],
+              "path": ["events"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

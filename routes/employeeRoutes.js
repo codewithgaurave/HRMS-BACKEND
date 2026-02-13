@@ -18,7 +18,7 @@ import {
   getEmployeesByRole,
   getManagers,
   getMyProfile,
-    updateBasicInfo,
+  updateBasicInfo,
   updateAddress,
   updateEmploymentDetails,
   updateBankDetails,
@@ -29,7 +29,8 @@ import {
   updateWorkSchedule,
   updatePersonalInfo,
   updateEmployeeCoordinates,
-  getEmployeeFormData
+  getEmployeeFormData,
+  getAllColleagues
 } from '../controllers/employeeController.js';
 import {
   authenticateToken,
@@ -51,6 +52,7 @@ router.post('/hr/create', authenticateToken, requireHRManager, createHRManager);
 // Employee management routes
 router.post('/register', authenticateToken, requireHRManager, registerEmployee);
 router.get('/form-data', authenticateToken, requireHRManager, getEmployeeFormData);
+router.get('/colleagues', authenticateToken, getAllColleagues); // Get all colleagues under same HR
 router.get('/', authenticateToken, getAllEmployees);
 router.get('/without-filters', authenticateToken, getEmployeesWithoutFilters);
 router.get('/stats', authenticateToken, getEmployeeStats);

@@ -1911,3 +1911,48 @@ export const updatePersonalInfo = async (req, res) => {
     });
   }
 };
+
+
+// Get all colleagues (employees under same HR)
+export const getAllColleagues = async (req, res) => {
+  try {
+    // Find who added the logged-in employee
+    const myProfile = await Employee.findById(req.employee._id).select('addedBy');
+    
+    if (!myProfile || !myProfile.addedBy) {
+      return res.status(404).json({
+        success: false,
+        message: 'Unable to find your HR manager'
+      });
+    }
+
+    const myHRId = myProfile.addedBy;
+
+    // Get all employees added by the same HR (including self)
+    const colleagues = await Employee.find({
+      $or: [
+        { addedBy: myHRId },
+        { _id: myHRId }
+      ],
+      isActive: true
+    })
+      .select('-password')
+      .populate('department', 'name')
+      .populate('designation', 'title')
+      .populate('manager', 'name employeeId')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      message: 'All colleagues under same HR',
+      totalColleagues: colleagues.length,
+      colleagues
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching colleagues',
+      error: error.message
+    });
+  }
+};
