@@ -419,18 +419,33 @@ export const getAssetsByEmployee = async (req, res) => {
   try {
     const { employeeId } = req.params;
     
-    const assets = await Asset.find({ 
-      'assignedTo.employee': employeeId,
-      'assignedTo.isActive': true 
+    const assets = await Asset.find({
+      'assignedTo': {
+        $elemMatch: {
+          employee: employeeId,
+          isActive: true
+        }
+      }
     })
-      .populate('assignedTo.employee', 'name employeeId')
+      .populate('assignedTo.employee', 'name employeeId designation department')
       .populate('assignedTo.assignedBy', 'name employeeId')
       .populate('createdBy', 'name employeeId')
       .sort({ 'assignedTo.assignedDate': -1 });
 
+    const filteredAssets = assets.map(asset => {
+      const activeAssignments = asset.assignedTo.filter(
+        a => a.isActive && a.employee._id.toString() === employeeId
+      );
+      
+      return {
+        ...asset.toObject(),
+        assignedTo: activeAssignments
+      };
+    });
+
     res.json({
       success: true,
-      assets
+      assets: filteredAssets
     });
   } catch (error) {
     res.status(500).json({
