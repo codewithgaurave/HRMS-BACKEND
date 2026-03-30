@@ -1,50 +1,41 @@
 import Task from "../models/Task.js";
 import Employee from "../models/Employee.js";
 
-// 📌 Create Task (HR Manager or Team Leader)
+// 📌 Create Task (Team Leader only — can assign to own team members only)
 export const createTask = async (req, res) => {
   try {
     const { title, description, assignedTo, priority, dueDate, deadline } = req.body;
 
     if (!title || !assignedTo || !deadline) {
-      return res.status(400).json({ 
-        success: false,
-        message: "Title, assignedTo, and deadline are required." 
-      });
+      return res.status(400).json({ success: false, message: "Title, assignedTo, and deadline are required." });
     }
 
-    // Validate deadline is in the future
     if (new Date(deadline) <= new Date()) {
-      return res.status(400).json({ 
-        success: false,
-        message: "Deadline must be in the future." 
-      });
+      return res.status(400).json({ success: false, message: "Deadline must be in the future." });
+    }
+
+    // Team Leader can only assign to their own team members
+    if (req.employee.role === 'Team_Leader') {
+      const teamMember = await Employee.findOne({ _id: assignedTo, manager: req.employee._id });
+      if (!teamMember) {
+        return res.status(403).json({ success: false, message: "You can only assign tasks to your own team members." });
+      }
     }
 
     const assignedEmployee = await Employee.findById(assignedTo);
     if (!assignedEmployee) {
-      return res.status(404).json({ 
-        success: false,
-        message: "Assigned employee not found." 
-      });
+      return res.status(404).json({ success: false, message: "Assigned employee not found." });
     }
 
     const task = await Task.create({
-      title,
-      description,
+      title, description,
       assignedBy: req.employee._id,
       assignedTo,
       priority,
       dueDate,
       deadline: new Date(deadline),
       status: "Assigned",
-      taskHistory: [
-        {
-          status: "Assigned",
-          updatedBy: req.employee._id,
-          remarks: "Task created and assigned",
-        },
-      ],
+      taskHistory: [{ status: "Assigned", updatedBy: req.employee._id, remarks: "Task created and assigned" }],
     });
 
     const populatedTask = await Task.findById(task._id)
@@ -52,69 +43,41 @@ export const createTask = async (req, res) => {
       .populate("assignedTo", "name email employeeId")
       .populate("taskHistory.updatedBy", "name email employeeId");
 
-    res.status(201).json({ 
-      success: true, 
-      message: "Task created successfully.", 
-      task: populatedTask 
-    });
+    res.status(201).json({ success: true, message: "Task created successfully.", task: populatedTask });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// 📌 Get All Tasks with filters (HR/Team Leader)
+// 📌 Get All Tasks — Team Leader sees only tasks they created
 export const getAllTasks = async (req, res) => {
   try {
-    const {
-      search,
-      status,
-      priority,
-      assignedTo,
-      deadlineStatus,
-      page = 1,
-      limit = 10,
-      sortBy = "createdAt",
-      sortOrder = "desc",
-           isActive,
-    } = req.query;
-    
+    const { search, status, priority, assignedTo, deadlineStatus, sortBy = "createdAt", sortOrder = "desc", isActive } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+
     const filter = {};
-    if(isActive === "true") filter.isActive = true
-    if(isActive === "false") filter.isActive = false
-    if (search) {
-      filter.$or = [
-        { title: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } }
-      ];
+
+    // Team Leader sees only tasks they assigned
+    if (req.employee.role === 'Team_Leader') {
+      filter.assignedBy = req.employee._id;
     }
-    
+
+    if (isActive === "true") filter.isActive = true;
+    else if (isActive === "false") filter.isActive = false;
+    else filter.isActive = true;
+    if (search) filter.$or = [{ title: { $regex: search, $options: "i" } }, { description: { $regex: search, $options: "i" } }];
     if (status) filter.status = status;
     if (priority) filter.priority = priority;
     if (assignedTo) filter.assignedTo = assignedTo;
 
-    // Deadline status filter
     if (deadlineStatus) {
       const now = new Date();
       switch (deadlineStatus) {
-        case 'overdue':
-          filter.deadline = { $lt: now };
-          filter.status = { $nin: ['Completed', 'Approved'] };
-          break;
-        case 'urgent':
-          const tomorrow = new Date(now);
-          tomorrow.setDate(tomorrow.getDate() + 1);
-          filter.deadline = { $gte: now, $lte: tomorrow };
-          filter.status = { $nin: ['Completed', 'Approved'] };
-          break;
-        case 'approaching':
-          const threeDays = new Date(now);
-          threeDays.setDate(threeDays.getDate() + 3);
-          filter.deadline = { $gte: now, $lte: threeDays };
-          filter.status = { $nin: ['Completed', 'Approved'] };
-          break;
-        case 'completed':
-          filter.status = { $in: ['Completed', 'Approved'] };
-          break;
+        case 'overdue': filter.deadline = { $lt: now }; filter.status = { $nin: ['Completed', 'Approved'] }; break;
+        case 'urgent': const t = new Date(now); t.setDate(t.getDate()+1); filter.deadline = { $gte: now, $lte: t }; filter.status = { $nin: ['Completed', 'Approved'] }; break;
+        case 'approaching': const td = new Date(now); td.setDate(td.getDate()+3); filter.deadline = { $gte: now, $lte: td }; filter.status = { $nin: ['Completed', 'Approved'] }; break;
+        case 'completed': filter.status = { $in: ['Completed', 'Approved'] }; break;
       }
     }
 
@@ -123,21 +86,12 @@ export const getAllTasks = async (req, res) => {
       .populate("assignedTo", "name email employeeId")
       .populate("taskHistory.updatedBy", "name email employeeId")
       .sort({ [sortBy]: sortOrder === "desc" ? -1 : 1 })
-      .limit(limit * 1)
+      .limit(limit)
       .skip((page - 1) * limit);
 
     const total = await Task.countDocuments(filter);
 
-    res.json({ 
-      success: true, 
-      tasks,
-      pagination: {
-        currentPage: page,
-        totalPages: Math.ceil(total / limit),
-        totalTasks: total,
-        limit: parseInt(limit)
-      }
-    });
+    res.json({ success: true, tasks, pagination: { currentPage: page, totalPages: Math.ceil(total / limit), totalTasks: total, limit } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -146,7 +100,9 @@ export const getAllTasks = async (req, res) => {
 // 📌 Get My Tasks (Employee)
 export const getMyTasks = async (req, res) => {
   try {
-    const { status, priority, deadlineStatus, page = 1, limit = 10 } = req.query;
+    const { status, priority, deadlineStatus } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
     
     const filter = { 
       assignedTo: req.employee._id, 
@@ -187,7 +143,7 @@ export const getMyTasks = async (req, res) => {
       .populate("assignedTo", "name email employeeId")
       .populate("taskHistory.updatedBy", "name email employeeId")
       .sort({ deadline: 1, createdAt: -1 })
-      .limit(limit * 1)
+      .limit(limit)
       .skip((page - 1) * limit);
 
     const total = await Task.countDocuments(filter);
@@ -282,55 +238,30 @@ export const updateTaskStatus = async (req, res) => {
   }
 };
 
-// 📌 Approve/Reject Task (HR/Team Leader - Only for completed tasks)
+// 📌 Approve/Reject Task (Team Leader — only tasks they assigned)
 export const reviewTask = async (req, res) => {
   try {
     const { status, remarks } = req.body;
     const taskId = req.params.id;
-    
-    if (!remarks) {
-      return res.status(400).json({ 
-        success: false,
-        message: "Remarks are required for task review." 
-      });
-    }
 
-    if (!["Approved", "Rejected"].includes(status)) {
-      return res.status(400).json({ 
-        success: false,
-        message: "Invalid status. Only Approved or Rejected allowed." 
-      });
-    }
+    if (!remarks) return res.status(400).json({ success: false, message: "Remarks are required for task review." });
+    if (!["Approved", "Rejected"].includes(status)) return res.status(400).json({ success: false, message: "Invalid status. Only Approved or Rejected allowed." });
 
     const task = await Task.findById(taskId);
-    if (!task) {
-      return res.status(404).json({ 
-        success: false,
-        message: "Task not found." 
-      });
+    if (!task) return res.status(404).json({ success: false, message: "Task not found." });
+
+    // Team Leader can only review tasks they assigned
+    if (req.employee.role === 'Team_Leader' && task.assignedBy.toString() !== req.employee._id.toString()) {
+      return res.status(403).json({ success: false, message: "You can only review tasks that you assigned." });
     }
 
-    // Check if task is completed (only completed tasks can be approved/rejected)
     if (task.status !== "Completed") {
-      return res.status(400).json({ 
-        success: false,
-        message: "Only completed tasks can be approved or rejected." 
-      });
+      return res.status(400).json({ success: false, message: "Only completed tasks can be approved or rejected." });
     }
 
-    // Update task status
-    const oldStatus = task.status;
     task.status = status;
     task.statusRemarks = remarks;
-
-    // Add to history
-    task.taskHistory.push({
-      status: status,
-      updatedBy: req.employee._id,
-      remarks: remarks,
-      updatedAt: new Date()
-    });
-
+    task.taskHistory.push({ status, updatedBy: req.employee._id, remarks, updatedAt: new Date() });
     await task.save();
 
     const populatedTask = await Task.findById(task._id)
@@ -338,11 +269,7 @@ export const reviewTask = async (req, res) => {
       .populate("assignedTo", "name email employeeId")
       .populate("taskHistory.updatedBy", "name email employeeId");
 
-    res.json({ 
-      success: true, 
-      message: `Task ${status.toLowerCase()} successfully.`, 
-      task: populatedTask 
-    });
+    res.json({ success: true, message: `Task ${status.toLowerCase()} successfully.`, task: populatedTask });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -611,21 +538,22 @@ export const getTaskStats = async (req, res) => {
   }
 };
 
-// 📌 Get Assignable Employees
+// 📌 Get Assignable Employees — Team Leader sees only their team members
 export const getAssignableEmployees = async (req, res) => {
   try {
-    const employees = await Employee.find({ 
-      isActive: true,
-      role: { $in: ['Employee', 'Team_Leader'] }
-    })
-    .select('name email employeeId designation department')
-    .populate('designation', 'name')
-    .populate('department', 'name');
-
-    res.json({
-      success: true,
-      employees
-    });
+    let employees;
+    if (req.employee.role === 'Team_Leader') {
+      employees = await Employee.find({ manager: req.employee._id, isActive: true })
+        .select('name email employeeId designation department')
+        .populate('designation', 'title')
+        .populate('department', 'name');
+    } else {
+      employees = await Employee.find({ isActive: true, role: { $in: ['Employee', 'Team_Leader'] } })
+        .select('name email employeeId designation department')
+        .populate('designation', 'title')
+        .populate('department', 'name');
+    }
+    res.json({ success: true, employees });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
