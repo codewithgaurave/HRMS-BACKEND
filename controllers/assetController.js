@@ -325,14 +325,16 @@ export const assignAsset = async (req, res) => {
       asset.assignedTo = [];
     }
 
-    // Add new assignment
+    // Add new assignment directly (HR/Manager - no approval needed)
     asset.assignedTo.push({
       employee: employeeId,
       assignedBy: req.employee._id,
       assignedDate: new Date(),
-      isActive: true,
       transferType: 'assign'
     });
+    
+    // Clear any leftover pending transfer requests if it's a direct HR assignment
+    asset.pendingTransfer = undefined;
     
     asset.status = 'Assigned';
     asset.updatedBy = req.employee.id;
@@ -430,6 +432,7 @@ export const getAssetsByEmployee = async (req, res) => {
       .populate('assignedTo.employee', 'name employeeId designation department')
       .populate('assignedTo.assignedBy', 'name employeeId')
       .populate('createdBy', 'name employeeId')
+      .populate('pendingTransfer.fromEmployee', 'name employeeId')
       .sort({ 'assignedTo.assignedDate': -1 });
 
     const filteredAssets = assets.map(asset => {
@@ -620,12 +623,15 @@ export const assignAssetToHRTeam = async (req, res) => {
       asset.assignedTo = [];
     }
 
-    // Add new assignment
+    // Add new assignment directly (HR - no approval needed)
     asset.assignedTo.push({
       employee: employeeId,
       assignedDate: new Date(),
       isActive: true
     });
+    
+    // Clear any leftover pending transfer requests for direct HR assignment
+    asset.pendingTransfer = undefined;
     
     asset.status = 'Assigned';
     asset.updatedBy = req.employee.id;
@@ -715,21 +721,6 @@ export const getTeamLeaderAssets = async (req, res) => {
   }
 };
 
-export default {
-  createAsset,
-  getAllAssets,
-  getAssetById,
-  updateAsset,
-  deleteAsset,
-  assignAsset,
-  returnAsset,
-  getAssetsByEmployee,
-  getAssetCategories,
-  getHRTeamAssets,
-  assignAssetToHRTeam,
-  getHRTeamEmployeesForAssets,
-  getTeamLeaderAssets
-};
 
 
 // Employee can transfer or share asset
@@ -781,64 +772,26 @@ export const transferAsset = async (req, res) => {
       });
     }
 
-    if (transferType === 'transfer') {
-      // Transfer: Remove from current employee and assign to target
-      myAssignment.isActive = false;
-      myAssignment.returnDate = new Date();
+    // Set Pending Transfer instead of immediate update
+    asset.pendingTransfer = {
+      toEmployee: toEmployeeId,
+      fromEmployee: req.employee._id,
+      transferType,
+      status: 'Pending',
+      requestDate: new Date()
+    };
 
-      asset.assignedTo.push({
-        employee: toEmployeeId,
-        assignedBy: req.employee._id,
-        assignedDate: new Date(),
-        isActive: true,
-        transferType: 'transfer'
-      });
-
-      asset.updatedBy = req.employee.id;
-      await asset.save();
-      await asset.populate('assignedTo.employee', 'name employeeId designation department');
-      await asset.populate('assignedTo.assignedBy', 'name employeeId');
-
-      return res.json({
-        success: true,
-        message: 'Asset transferred successfully',
-        asset
-      });
-    } 
+    asset.updatedBy = req.employee.id;
+    await asset.save();
     
-    else if (transferType === 'share') {
-      // Share: Both employees will have active assignment
-      const alreadyShared = asset.assignedTo.find(
-        a => a.isActive && a.employee.toString() === toEmployeeId
-      );
+    await asset.populate('pendingTransfer.toEmployee', 'name employeeId designation department');
+    await asset.populate('pendingTransfer.fromEmployee', 'name employeeId designation department');
 
-      if (alreadyShared) {
-        return res.status(400).json({
-          success: false,
-          message: 'Asset is already shared with this employee'
-        });
-      }
-
-      asset.assignedTo.push({
-        employee: toEmployeeId,
-        assignedBy: req.employee._id,
-        assignedDate: new Date(),
-        isActive: true,
-        transferType: 'share'
-      });
-
-      asset.updatedBy = req.employee.id;
-      await asset.save();
-      await asset.populate('assignedTo.employee', 'name employeeId designation department');
-      await asset.populate('assignedTo.assignedBy', 'name employeeId');
-
-      return res.json({
-        success: true,
-        message: 'Asset shared successfully',
-        asset
-      });
-    }
-
+    return res.json({
+      success: true,
+      message: `Transfer/Share request sent to employee. It will be completed once they accept it.`,
+      asset
+    });
   } catch (error) {
     console.error('Transfer Asset Error:', error);
     res.status(500).json({
@@ -1115,46 +1068,24 @@ export const employeeTransferAsset = async (req, res) => {
       });
     }
 
-    if (transferType === 'transfer') {
-      myActiveAssignment.isActive = false;
-      myActiveAssignment.returnDate = new Date();
+    // Set Pending Transfer instead of immediate update
+    asset.pendingTransfer = {
+      toEmployee: toEmployeeId,
+      fromEmployee: fromEmployeeId,
+      transferType,
+      status: 'Pending',
+      requestDate: new Date()
+    };
 
-      asset.assignedTo.push({
-        employee: toEmployeeId,
-        assignedBy: fromEmployeeId,
-        assignedDate: new Date(),
-        isActive: true,
-        transferType: 'transfer'
-      });
-
-      asset.status = 'Assigned';
-
-    } else if (transferType === 'share') {
-      asset.assignedTo.push({
-        employee: toEmployeeId,
-        assignedBy: fromEmployeeId,
-        assignedDate: new Date(),
-        isActive: true,
-        transferType: 'share'
-      });
-
-      asset.status = 'Assigned';
-    } else {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid transfer type. Use "transfer" or "share"'
-      });
-    }
-
+    asset.updatedBy = req.employee.id;
     await asset.save();
-    await asset.populate('assignedTo.employee', 'name employeeId designation');
-    await asset.populate('assignedTo.assignedBy', 'name employeeId');
+    
+    await asset.populate('pendingTransfer.toEmployee', 'name employeeId designation');
+    await asset.populate('pendingTransfer.fromEmployee', 'name employeeId');
 
     res.json({
       success: true,
-      message: transferType === 'transfer' 
-        ? `Asset transferred successfully to ${toEmployee.name.first} ${toEmployee.name.last}`
-        : `Asset shared successfully with ${toEmployee.name.first} ${toEmployee.name.last}`,
+      message: `Transfer/Share request sent to ${toEmployee.name.first} ${toEmployee.name.last}. Waiting for their acceptance.`,
       asset,
       transferDetails: {
         from: {
@@ -1166,7 +1097,7 @@ export const employeeTransferAsset = async (req, res) => {
           name: `${toEmployee.name.first} ${toEmployee.name.last}`
         },
         transferType,
-        transferDate: new Date(),
+        requestDate: new Date(),
         reason: reason || 'Employee initiated transfer'
       }
     });
@@ -1246,4 +1177,141 @@ export const getColleaguesForTransfer = async (req, res) => {
       message: error.message
     });
   }
+};
+
+// Accept Asset Transfer
+export const acceptAssetTransfer = async (req, res) => {
+  try {
+    const assetId = req.params.id;
+    const toEmployeeId = req.employee._id;
+
+    const asset = await Asset.findById(assetId);
+    if (!asset) {
+      return res.status(404).json({ success: false, message: 'Asset not found' });
+    }
+
+    if (!asset.pendingTransfer || asset.pendingTransfer.toEmployee.toString() !== toEmployeeId.toString()) {
+      return res.status(403).json({ success: false, message: 'No pending transfer request found for you' });
+    }
+
+    const { fromEmployee, transferType } = asset.pendingTransfer;
+
+    if (transferType === 'transfer') {
+      // Deactivate current assignment for the sender
+      const fromAssignment = asset.assignedTo.find(a => a.isActive && a.employee.toString() === fromEmployee.toString());
+      if (fromAssignment) {
+        fromAssignment.isActive = false;
+        fromAssignment.returnDate = new Date();
+      }
+    } else if (transferType === 'share') {
+      // For share, both stay active. Just check if already active for target
+      const alreadyActive = asset.assignedTo.find(a => a.isActive && a.employee.toString() === toEmployeeId.toString());
+      if (alreadyActive) {
+         asset.pendingTransfer = undefined;
+         await asset.save();
+         return res.status(400).json({ success: false, message: 'Asset is already active for you' });
+      }
+    }
+
+    // Add new assignment for the recipient
+    asset.assignedTo.push({
+      employee: toEmployeeId,
+      assignedBy: fromEmployee,
+      assignedDate: new Date(),
+      isActive: true,
+      transferType: transferType
+    });
+
+    asset.status = 'Assigned';
+    asset.pendingTransfer = undefined; // Clear pending
+    asset.updatedBy = req.employee._id;
+
+    await asset.save();
+    await asset.populate('assignedTo.employee', 'name employeeId designation department');
+    
+    res.json({ 
+      success: true, 
+      message: `Asset ${transferType === 'transfer' ? 'transfer' : 'share'} accepted successfully`, 
+      asset 
+    });
+  } catch (error) {
+    console.error('Accept Transfer Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Reject Asset Transfer
+export const rejectAssetTransfer = async (req, res) => {
+  try {
+    const assetId = req.params.id;
+    const toEmployeeId = req.employee._id;
+
+    const asset = await Asset.findById(assetId);
+    if (!asset) {
+      return res.status(404).json({ success: false, message: 'Asset not found' });
+    }
+
+    if (!asset.pendingTransfer || asset.pendingTransfer.toEmployee.toString() !== toEmployeeId.toString()) {
+      return res.status(403).json({ success: false, message: 'No pending transfer request found for you' });
+    }
+
+    // Just clear the pending transfer
+    asset.pendingTransfer = undefined;
+    await asset.save();
+
+    res.json({ success: true, message: 'Asset transfer request rejected' });
+  } catch (error) {
+    console.error('Reject Transfer Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Get All Incoming Pending Transfers for the logged-in employee
+export const getIncomingTransfers = async (req, res) => {
+  try {
+    const employeeId = req.employee._id;
+    
+    const assets = await Asset.find({
+      'pendingTransfer.toEmployee': employeeId,
+      'pendingTransfer.status': 'Pending'
+    }).populate('pendingTransfer.fromEmployee', 'name employeeId designation department')
+      .populate('createdBy', 'name employeeId')
+      .populate('assignedTo.employee', 'name employeeId');
+
+    res.json({
+      success: true,
+      assets: assets.map(asset => ({
+        _id: asset._id,
+        assetId: asset.assetId,
+        name: asset.name,
+        category: asset.category,
+        brand: asset.brand,
+        model: asset.model,
+        pendingTransfer: asset.pendingTransfer
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export default {
+  createAsset,
+  getAllAssets,
+  getAssetById,
+  updateAsset,
+  deleteAsset,
+  assignAsset,
+  returnAsset,
+  getAssetsByEmployee,
+  getAssetCategories,
+  getHRTeamAssets,
+  assignAssetToHRTeam,
+  getHRTeamEmployeesForAssets,
+  getTeamLeaderAssets,
+  transferAsset,
+  employeeTransferAsset,
+  acceptAssetTransfer,
+  rejectAssetTransfer,
+  getIncomingTransfers
 };

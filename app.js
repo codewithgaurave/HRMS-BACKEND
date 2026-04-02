@@ -25,6 +25,7 @@ import assetRequestRoutes from './routes/assetRequestRoutes.js';
 import noticeRoutes from './routes/noticeRoutes.js';
 import hrAnalyticsRoutes from './routes/hrAnalyticsRoutes.js';
 import hrSummaryRoutes from './routes/hrSummaryRoutes.js';
+import assetCategoryRoutes from './routes/assetCategoryRoutes.js';
 
 
 
@@ -81,6 +82,7 @@ app.use("/api/asset-requests", assetRequestRoutes);
 app.use("/api/notices", noticeRoutes);
 app.use("/api/hr-analytics", hrAnalyticsRoutes);
 app.use("/api/hr-summary", hrSummaryRoutes);
+app.use("/api/asset-categories", assetCategoryRoutes);
 
 
 

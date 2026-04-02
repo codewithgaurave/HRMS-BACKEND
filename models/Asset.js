@@ -14,7 +14,7 @@ const assetSchema = new mongoose.Schema({
   category: {
     type: String,
     required: true,
-    enum: ['Laptop', 'Desktop', 'Mobile', 'Tablet', 'T-Shirt', 'Uniform', 'ID Card', 'Access Card', 'Headphones', 'Monitor', 'Keyboard', 'Mouse', 'Charger', 'Other']
+    trim: true
   },
   brand: {
     type: String,
@@ -71,6 +71,29 @@ const assetSchema = new mongoose.Schema({
       default: 'assign'
     }
   }],
+  pendingTransfer: {
+    toEmployee: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Employee'
+    },
+    fromEmployee: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Employee'
+    },
+    transferType: {
+      type: String,
+      enum: ['transfer', 'share', 'assign']
+    },
+    status: {
+      type: String,
+      enum: ['Pending', 'Accepted', 'Rejected'],
+      default: 'Pending'
+    },
+    requestDate: {
+      type: Date,
+      default: Date.now
+    }
+  },
   location: {
     type: String,
     trim: true

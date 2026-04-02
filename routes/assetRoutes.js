@@ -20,7 +20,10 @@ import {
   getAllAssetsHistory,
   employeeTransferAsset,
   getMyTransferableAssets,
-  getColleaguesForTransfer
+  getColleaguesForTransfer,
+  acceptAssetTransfer,
+  rejectAssetTransfer,
+  getIncomingTransfers
 } from '../controllers/assetController.js';
 
 const router = express.Router();
@@ -38,6 +41,7 @@ router.get('/history/my', getMyAssetHistory); // Employee Panel - My asset histo
 // Employee Transfer Routes (MUST come before /:id routes)
 router.get('/my/transferable', getMyTransferableAssets); // Employee - My assets that I can transfer
 router.get('/colleagues/transfer', getColleaguesForTransfer); // Employee - Get colleagues list
+router.get('/pending/incoming', getIncomingTransfers); // Get pending incoming transfer requests
 
 // HR Team specific routes (must come before general routes)
 router.get('/team/hr', getHRTeamAssets);
@@ -65,5 +69,7 @@ router.post('/:id/assign', assignAsset);
 router.post('/:id/return', returnAsset);
 router.post('/:id/transfer', transferAsset); // HR/Team Leader transfer
 router.post('/:id/employee-transfer', employeeTransferAsset); // Employee-to-Employee transfer/share
+router.post('/:id/accept-transfer', acceptAssetTransfer); // Accept an incoming transfer
+router.post('/:id/reject-transfer', rejectAssetTransfer); // Reject an incoming transfer
 
 export default router;
