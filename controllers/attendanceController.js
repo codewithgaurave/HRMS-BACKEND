@@ -61,10 +61,12 @@ const getFiltersData = async () => {
 
 // Calculate if day is working day, holiday, or week off
 const calculateDayStatus = async (employee, date) => {
-  const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
+  // Always determine day-of-week using IST (UTC+5:30)
+  const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+  const istMs = date.getTime() + IST_OFFSET;
+  const istDay = new Date(istMs).getUTCDay(); // 0=Sun, 6=Sat
 
-  // Check if weekend (assuming 5-day work week)
-  if (dayOfWeek === 0 || dayOfWeek === 6) {
+  if (istDay === 0 || istDay === 6) {
     return "Week Off";
   }
 
@@ -238,8 +240,11 @@ export const punchIn = async (req, res) => {
     });
     
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    console.log('4. Today date (start of day):', today);
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    today.setTime(today.getTime() + istOffset);
+    today.setUTCHours(0, 0, 0, 0);
+    today.setTime(today.getTime() - istOffset);
+    console.log('4. Today date (IST start of day):', today);
     
     // Get employee with office location
     const employee = await Employee.findById(employeeId)
@@ -328,9 +333,9 @@ export const punchIn = async (req, res) => {
       });
     }
 
-    // Check if today is holiday or week off
+    // Check if today is holiday (but allow week off for punch-in)
     const dayStatus = await calculateDayStatus(employee, today);
-    if (dayStatus !== "Working Day") {
+    if (dayStatus === "Holiday") {
       return res.status(400).json({
         success: false,
         message: `Cannot punch in on ${dayStatus}`
@@ -402,7 +407,10 @@ export const punchOut = async (req, res) => {
     const { coordinates, earlyDepartureReason } = req.body;
     const employeeId = req.employee._id;
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    today.setTime(today.getTime() + istOffset);
+    today.setUTCHours(0, 0, 0, 0);
+    today.setTime(today.getTime() - istOffset);
 
     // Find today's attendance
     const attendance = await Attendance.findOne({
@@ -486,8 +494,14 @@ export const punchInByHr = async (req, res) => {
   try {
     const { punchInTime } = req.body;
     const { employeeId } = req.params;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+
+    // Get IST midnight as UTC
+    const now = new Date();
+    const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+    const istNow = new Date(now.getTime() + IST_OFFSET);
+    // Zero out time in IST, then convert back to UTC for DB query
+    istNow.setUTCHours(0, 0, 0, 0);
+    const today = new Date(istNow.getTime() - IST_OFFSET);
 
     // Check if already punched in for today
     const existingAttendance = await Attendance.findOne({
@@ -517,9 +531,9 @@ export const punchInByHr = async (req, res) => {
 
     const officeLocation = await OfficeLocation.findById(employee?.officeLocation?._id)
 
-    // Check if today is holiday or week off
+    // Check if today is holiday (but allow week off for punch-in)
     const dayStatus = await calculateDayStatus(employee, today);
-    if (dayStatus !== "Working Day") {
+    if (dayStatus === "Holiday") {
       return res.status(400).json({
         success: false,
         message: `Cannot punch in on ${dayStatus}`
@@ -605,7 +619,10 @@ export const punchOutByHr = async (req, res) => {
     const { punchOutTime } = req.body;
     const { employeeId } = req.params;
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    today.setTime(today.getTime() + istOffset);
+    today.setUTCHours(0, 0, 0, 0);
+    today.setTime(today.getTime() - istOffset);
 
     // Find today's attendance
     const attendance = await Attendance.findOne({
@@ -697,7 +714,10 @@ export const getTodayAttendanceOfEmployee = async (req, res) => {
   try {
     const { employeeId } = req.params;
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    today.setTime(today.getTime() + istOffset);
+    today.setUTCHours(0, 0, 0, 0);
+    today.setTime(today.getTime() - istOffset);
 
     const attendance = await Attendance.findOne({
       employee: employeeId,
@@ -1264,7 +1284,10 @@ export const getTodayAttendance = async (req, res) => {
   try {
     const employeeId = req.employee._id;
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    today.setTime(today.getTime() + istOffset);
+    today.setUTCHours(0, 0, 0, 0);
+    today.setTime(today.getTime() - istOffset);
 
     const attendance = await Attendance.findOne({
       employee: employeeId,
