@@ -275,49 +275,44 @@ export const punchIn = async (req, res) => {
       });
     }
     
-    console.log('6. Calling validateOfficeLocation...');
-    console.log('   - User lat:', coordinates.latitude);
-    console.log('   - User lng:', coordinates.longitude);
-    console.log('   - Office ID:', employee.officeLocation._id);
-    
-    const isWithinOffice = await validateOfficeLocation(
-      parseFloat(coordinates.latitude),
-      parseFloat(coordinates.longitude),
-      employee.officeLocation._id,
-      employeeId
-    );
-    
-    console.log('7. Validation Result:', isWithinOffice);
-    
-    if (!isWithinOffice) {
-      console.log('8. ❌ LOCATION VALIDATION FAILED');
-      // Get office details for better error message
-      const office = await OfficeLocation.findById(employee.officeLocation._id);
-      console.log('   Office Location:', {
-        name: office?.officeName,
-        lat: office?.latitude,
-        lng: office?.longitude,
-        address: office?.officeAddress
-      });
-      
-      return res.status(400).json({
-        success: false,
-        message: "Punch in Service is available only inside the office",
-        debugInfo: process.env.NODE_ENV === 'development' ? {
-          userLocation: {
-            latitude: coordinates.latitude,
-            longitude: coordinates.longitude
-          },
-          officeLocation: office ? {
-            name: office.officeName,
-            latitude: office.latitude,
-            longitude: office.longitude,
-            address: office.officeAddress
-          } : null
-        } : undefined
-      });
+    // Field employees can punch in from anywhere
+    let isWithinOffice = true;
+    if (!employee.isFieldEmployee) {
+      console.log('6. Calling validateOfficeLocation...');
+      console.log('   - User lat:', coordinates.latitude);
+      console.log('   - User lng:', coordinates.longitude);
+      console.log('   - Office ID:', employee.officeLocation._id);
+
+      isWithinOffice = await validateOfficeLocation(
+        parseFloat(coordinates.latitude),
+        parseFloat(coordinates.longitude),
+        employee.officeLocation._id,
+        employeeId
+      );
+
+      console.log('7. Validation Result:', isWithinOffice);
+
+      if (!isWithinOffice) {
+        console.log('8. ❌ LOCATION VALIDATION FAILED');
+        const office = await OfficeLocation.findById(employee.officeLocation._id);
+        return res.status(400).json({
+          success: false,
+          message: "Punch in Service is available only inside the office",
+          debugInfo: process.env.NODE_ENV === 'development' ? {
+            userLocation: { latitude: coordinates.latitude, longitude: coordinates.longitude },
+            officeLocation: office ? {
+              name: office.officeName,
+              latitude: office.latitude,
+              longitude: office.longitude,
+              address: office.officeAddress
+            } : null
+          } : undefined
+        });
+      }
+    } else {
+      console.log('6. Field employee - skipping location validation');
     }
-    
+
     console.log('8. ✅ LOCATION VALIDATION PASSED');
     
     // Check if already punched in for today
@@ -432,19 +427,22 @@ export const punchOut = async (req, res) => {
       });
     }
 
-    // Validate location
-    const isWithinOffice = await validateOfficeLocation(
-      coordinates.latitude,
-      coordinates.longitude,
-      attendance.officeLocation,
-      employeeId
-    );
-
-        if (!isWithinOffice) {
-      return res.status(400).json({
-        success: false,
-        message: "Punch out Service is available only inside the office",
-      });
+    // Field employees can punch out from anywhere
+    const punchOutEmp = await Employee.findById(employeeId).select('isFieldEmployee');
+    let isWithinOffice = true;
+    if (!punchOutEmp?.isFieldEmployee) {
+      isWithinOffice = await validateOfficeLocation(
+        coordinates.latitude,
+        coordinates.longitude,
+        attendance.officeLocation,
+        employeeId
+      );
+      if (!isWithinOffice) {
+        return res.status(400).json({
+          success: false,
+          message: "Punch out Service is available only inside the office",
+        });
+      }
     }
 
     // Update punch out data
@@ -540,19 +538,21 @@ export const punchInByHr = async (req, res) => {
       });
     }
 
-    // Validate location (within office radius - 100 meters)
-    const isWithinOffice = await validateOfficeLocation(
-      officeLocation.latitude,
-      officeLocation.longitude,
-      employee.officeLocation,
-      employeeId
-    );
-
-        if (!isWithinOffice) {
-      return res.status(400).json({
-        success: false,
-        message: "Punch in Service is available only inside the office",
-      });
+    // Field employees skip location validation
+    let isWithinOffice = true;
+    if (!employee.isFieldEmployee) {
+      isWithinOffice = await validateOfficeLocation(
+        officeLocation.latitude,
+        officeLocation.longitude,
+        employee.officeLocation,
+        employeeId
+      );
+      if (!isWithinOffice) {
+        return res.status(400).json({
+          success: false,
+          message: "Punch in Service is available only inside the office",
+        });
+      }
     }
 
     // Create or update attendance record
@@ -640,7 +640,6 @@ export const punchOutByHr = async (req, res) => {
 
     const officeLocation = await OfficeLocation.findById(attendance?.officeLocation)
 
-
     if (attendance.punchOut && attendance.punchOut.timestamp) {
       return res.status(400).json({
         success: false,
@@ -648,19 +647,22 @@ export const punchOutByHr = async (req, res) => {
       });
     }
 
-    // Validate location (within office radius - 100 meters)
-    const isWithinOffice = await validateOfficeLocation(
-      officeLocation.latitude,
-      officeLocation.longitude,
-      attendance.officeLocation,
-      employeeId
-    );
-
-        if (!isWithinOffice) {
-      return res.status(400).json({
-        success: false,
-        message: "Punch out Service is available only inside the office",
-      });
+    // Field employees skip location validation
+    const hrPunchOutEmp = await Employee.findById(employeeId).select('isFieldEmployee');
+    let isWithinOffice = true;
+    if (!hrPunchOutEmp?.isFieldEmployee) {
+      isWithinOffice = await validateOfficeLocation(
+        officeLocation.latitude,
+        officeLocation.longitude,
+        attendance.officeLocation,
+        employeeId
+      );
+      if (!isWithinOffice) {
+        return res.status(400).json({
+          success: false,
+          message: "Punch out Service is available only inside the office",
+        });
+      }
     }
 
     // Update punch out data

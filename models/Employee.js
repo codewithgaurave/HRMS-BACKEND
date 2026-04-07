@@ -86,6 +86,11 @@ allowedPunchInRange: {
   max: 10000
 },
 
+isFieldEmployee: {
+  type: Boolean,
+  default: false
+},
+
 
   // Employment Details - Updated with References
   department: {
