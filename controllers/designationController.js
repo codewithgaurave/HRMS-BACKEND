@@ -9,18 +9,21 @@ export const createDesignation = async (req, res) => {
       return res.status(400).json({ message: "Title is required" });
     }
 
-    // Check if designation exists for this HR
-    const exists = await Designation.findOne({ title, hrId: req.employee._id });
+    // Check if designation exists for this HR (case-insensitive)
+    const exists = await Designation.findOne({ 
+      title: { $regex: `^${title.trim()}$`, $options: 'i' }, 
+      hrId: req.employee._id 
+    });
     if (exists) {
-      return res.status(400).json({ message: "Designation already exists" });
+      return res.status(400).json({ message: `Designation "${title}" already exists` });
     }
 
     const designation = await Designation.create({
-      title,
+      title: title.trim(),
       description,
       status,
       createdBy: req.employee._id,
-      hrId: req.employee._id,
+      hrId: req.employee.role === 'HR_Manager' ? req.employee._id : req.employee.manager || req.employee._id,
     });
 
     res.status(201).json({ message: "Designation created", designation });
