@@ -4,7 +4,7 @@ import Employee from "../models/Employee.js";
 // 📌 Create Task (Team Leader only — can assign to own team members only)
 export const createTask = async (req, res) => {
   try {
-    const { title, description, assignedTo, priority, dueDate, deadline } = req.body;
+    const { title, description, assignedTo, priority, dueDate, deadline, taskType } = req.body;
 
     if (!title || !assignedTo || !deadline) {
       return res.status(400).json({ success: false, message: "Title, assignedTo, and deadline are required." });
@@ -34,6 +34,7 @@ export const createTask = async (req, res) => {
       priority,
       dueDate,
       deadline: new Date(deadline),
+      taskType: taskType || null,
       status: "Assigned",
       taskHistory: [{ status: "Assigned", updatedBy: req.employee._id, remarks: "Task created and assigned" }],
     });
@@ -41,6 +42,7 @@ export const createTask = async (req, res) => {
     const populatedTask = await Task.findById(task._id)
       .populate("assignedBy", "name email employeeId")
       .populate("assignedTo", "name email employeeId")
+      .populate("taskType", "name")
       .populate("taskHistory.updatedBy", "name email employeeId");
 
     res.status(201).json({ success: true, message: "Task created successfully.", task: populatedTask });
@@ -84,6 +86,7 @@ export const getAllTasks = async (req, res) => {
     const tasks = await Task.find(filter)
       .populate("assignedBy", "name email employeeId")
       .populate("assignedTo", "name email employeeId")
+      .populate("taskType", "name")
       .populate("taskHistory.updatedBy", "name email employeeId")
       .sort({ [sortBy]: sortOrder === "desc" ? -1 : 1 })
       .limit(limit)
@@ -141,6 +144,7 @@ export const getMyTasks = async (req, res) => {
     const tasks = await Task.find(filter)
       .populate("assignedBy", "name email employeeId")
       .populate("assignedTo", "name email employeeId")
+      .populate("taskType", "name")
       .populate("taskHistory.updatedBy", "name email employeeId")
       .sort({ deadline: 1, createdAt: -1 })
       .limit(limit)
