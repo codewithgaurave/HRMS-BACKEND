@@ -68,6 +68,11 @@ const taskSchema = new mongoose.Schema(
       type: Boolean,
       default: true
     },
+    taskType: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "TaskType",
+      default: null
+    },
     taskHistory: [taskHistorySchema]
   },
   {

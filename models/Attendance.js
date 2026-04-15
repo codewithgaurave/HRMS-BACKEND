@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import WorkShift from "./WorkShift.js";
 
 const attendanceSchema = new mongoose.Schema({
   // Employee Reference
@@ -122,18 +123,29 @@ attendanceSchema.virtual('calculatedWorkHours').get(function() {
 });
 
 // Pre-save middleware to calculate work hours
-attendanceSchema.pre('save', function(next) {
+attendanceSchema.pre('save', async function(next) {
   if (this.punchIn && this.punchOut && this.punchIn.timestamp && this.punchOut.timestamp) {
     const workHours = this.calculatedWorkHours;
     this.totalWorkHours = Math.max(0, workHours);
-    
-    // Calculate overtime (assuming 8 hours standard work day)
-    const standardHours = 8;
-    this.overtimeHours = Math.max(0, workHours - standardHours);
+
+    // Overtime = actual work hours minus shift duration (fetched from DB)
+    try {
+      const shift = await WorkShift.findById(this.shift).select('startTime endTime');
+      if (shift && shift.startTime && shift.endTime) {
+        const [sH, sM] = shift.startTime.split(':').map(Number);
+        const [eH, eM] = shift.endTime.split(':').map(Number);
+        const shiftDurationHours = (eH * 60 + eM - (sH * 60 + sM)) / 60;
+        this.overtimeHours = Math.max(0, workHours - shiftDurationHours);
+      } else {
+        this.overtimeHours = Math.max(0, workHours - 8);
+      }
+    } catch (e) {
+      this.overtimeHours = Math.max(0, workHours - 8);
+    }
   }
-  
+
   // Auto-calculate status
-  this.calculateAttendanceStatus();
+  await this.calculateAttendanceStatus();
   next();
 });
 
@@ -160,33 +172,50 @@ attendanceSchema.statics.getEmployeeSummary = async function(employeeId, startDa
 };
 
 // Method to calculate attendance status
-attendanceSchema.methods.calculateAttendanceStatus = function() {
+attendanceSchema.methods.calculateAttendanceStatus = async function() {
   if (!this.punchIn || !this.punchIn.timestamp) {
     this.status = "Absent";
     return;
   }
 
-  const punchInTime = this.punchIn.timestamp;
-  const scheduledStart = new Date(punchInTime);
-  scheduledStart.setHours(9, 0, 0, 0); // Default 9:00 AM
-  
-  // Calculate late minutes
-  const lateDiff = punchInTime - scheduledStart;
-  const lateMinutes = Math.max(0, lateDiff / (1000 * 60)); // Convert to minutes
+  // Fetch actual shift times from DB
+  let shiftStart = { hours: 9, minutes: 0 };  // fallback
+  let shiftEnd   = { hours: 18, minutes: 0 }; // fallback
 
-  // Calculate early departure if punched out
+  try {
+    const shift = await WorkShift.findById(this.shift).select('startTime endTime');
+    if (shift && shift.startTime && shift.endTime) {
+      const [sH, sM] = shift.startTime.split(':').map(Number);
+      const [eH, eM] = shift.endTime.split(':').map(Number);
+      shiftStart = { hours: sH, minutes: sM };
+      shiftEnd   = { hours: eH, minutes: eM };
+    }
+  } catch (e) { /* use fallback */ }
+
+  const punchInTime = this.punchIn.timestamp;
+
+  // Scheduled start on the same calendar date as punch-in
+  const scheduledStart = new Date(punchInTime);
+  scheduledStart.setHours(shiftStart.hours, shiftStart.minutes, 0, 0);
+
+  // Late minutes
+  const lateMinutes = Math.max(0, (punchInTime - scheduledStart) / (1000 * 60));
+
+  // Early departure minutes (only when punched out)
   let earlyDepartureMinutes = 0;
   if (this.punchOut && this.punchOut.timestamp) {
     const punchOutTime = this.punchOut.timestamp;
+
+    // Scheduled end on the same calendar date as punch-out
     const scheduledEnd = new Date(punchOutTime);
-    scheduledEnd.setHours(18, 0, 0, 0); // Default 6:00 PM
-    
-    const earlyDiff = scheduledEnd - punchOutTime;
-    earlyDepartureMinutes = Math.max(0, earlyDiff / (1000 * 60)); // Convert to minutes
+    scheduledEnd.setHours(shiftEnd.hours, shiftEnd.minutes, 0, 0);
+
+    // Positive value means left before shift end, negative means stayed after (overtime)
+    earlyDepartureMinutes = Math.max(0, (scheduledEnd - punchOutTime) / (1000 * 60));
     this.earlyDepartureMinutes = earlyDepartureMinutes;
   }
 
-  // Determine status
+  // Determine status — priority: Late > Early Departure > Half Day > Present
   if (lateMinutes > 30) {
     this.status = "Late";
   } else if (earlyDepartureMinutes > 30) {
