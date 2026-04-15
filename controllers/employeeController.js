@@ -74,7 +74,7 @@ export const loginEmployee = async (req, res) => {
         role: employee.role 
       },
       JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: '365d' }
     );
 
     // Remove password from response
