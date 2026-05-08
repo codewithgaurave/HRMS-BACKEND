@@ -305,7 +305,7 @@ export const getAttendanceReports = async (req, res) => {
         onLeave: { $sum: { $cond: [{ $eq: ['$status', 'On Leave'] }, 1, 0] } },
         totalWorkHours: { $sum: '$totalWorkHours' },
         overtimeHours: { $sum: '$overtimeHours' },
-        totalDays: { $sum: 1 }
+        totalDays: { $sum: { $cond: [{ $in: ['$status', ['Present', 'Absent', 'Late', 'Half Day', 'On Leave']] }, 1, 0] } }
       }},
       { $sort: { department: 1, lastName: 1 } }
     ]);

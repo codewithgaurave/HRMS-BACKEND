@@ -843,11 +843,15 @@ export const getAttendance = async (req, res) => {
       query.employee = req.employee._id;
     }
 
-    // Date range filter
+    // Date range filter - FIXED for proper timezone handling
     if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      start.setUTCHours(0, 0, 0, 0);
+      end.setUTCHours(23, 59, 59, 999);
       query.date = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
+        $gte: start,
+        $lte: end
       };
     }
 
@@ -1359,17 +1363,23 @@ export const getMyAttendances = async (req, res) => {
     const employeeId = req.employee._id;
     const query = { employee: employeeId };
 
-    // Date range filter
+    // Date range filter - FIXED for proper timezone handling
     if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      start.setUTCHours(0, 0, 0, 0);
+      end.setUTCHours(23, 59, 59, 999);
       query.date = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
+        $gte: start,
+        $lte: end
       };
     } else {
       // Default to last 30 days if no date range provided
       const defaultEndDate = new Date();
       const defaultStartDate = new Date();
       defaultStartDate.setDate(defaultStartDate.getDate() - 30);
+      defaultStartDate.setUTCHours(0, 0, 0, 0);
+      defaultEndDate.setUTCHours(23, 59, 59, 999);
 
       query.date = {
         $gte: defaultStartDate,
@@ -2193,12 +2203,12 @@ const getEmployeeAttendanceRecords = async (req, res, employeeId, employee, filt
 
     const query = { employee: employeeId };
 
-    // Date range filter
+    // Date range filter - FIXED for proper timezone handling
     if (startDate && endDate) {
       const start = new Date(startDate);
       const end = new Date(endDate);
-      start.setHours(0, 0, 0, 0);
-      end.setHours(23, 59, 59, 999);
+      start.setUTCHours(0, 0, 0, 0);
+      end.setUTCHours(23, 59, 59, 999);
       
       query.date = {
         $gte: start,
@@ -2209,8 +2219,8 @@ const getEmployeeAttendanceRecords = async (req, res, employeeId, employee, filt
       const defaultEndDate = new Date();
       const defaultStartDate = new Date();
       defaultStartDate.setDate(defaultStartDate.getDate() - 30);
-      defaultStartDate.setHours(0, 0, 0, 0);
-      defaultEndDate.setHours(23, 59, 59, 999);
+      defaultStartDate.setUTCHours(0, 0, 0, 0);
+      defaultEndDate.setUTCHours(23, 59, 59, 999);
 
       query.date = {
         $gte: defaultStartDate,
@@ -2363,39 +2373,39 @@ const getEmployeeAttendanceSummary = async (req, res, employeeId, employee, filt
     switch (period) {
       case 'today':
         startDate = new Date();
-        startDate.setHours(0, 0, 0, 0);
+        startDate.setUTCHours(0, 0, 0, 0);
         break;
       case 'yesterday':
         startDate = new Date();
         startDate.setDate(startDate.getDate() - 1);
-        startDate.setHours(0, 0, 0, 0);
+        startDate.setUTCHours(0, 0, 0, 0);
         endDate = new Date(startDate);
-        endDate.setHours(23, 59, 59, 999);
+        endDate.setUTCHours(23, 59, 59, 999);
         break;
       case 'week':
         startDate = new Date();
         startDate.setDate(startDate.getDate() - 7);
-        startDate.setHours(0, 0, 0, 0);
+        startDate.setUTCHours(0, 0, 0, 0);
         break;
       case 'month':
         startDate = new Date();
         startDate.setMonth(startDate.getMonth() - 1);
-        startDate.setHours(0, 0, 0, 0);
+        startDate.setUTCHours(0, 0, 0, 0);
         break;
       case 'quarter':
         startDate = new Date();
         startDate.setMonth(startDate.getMonth() - 3);
-        startDate.setHours(0, 0, 0, 0);
+        startDate.setUTCHours(0, 0, 0, 0);
         break;
       case 'year':
         startDate = new Date();
         startDate.setFullYear(startDate.getFullYear() - 1);
-        startDate.setHours(0, 0, 0, 0);
+        startDate.setUTCHours(0, 0, 0, 0);
         break;
       default:
         startDate = new Date();
         startDate.setMonth(startDate.getMonth() - 1);
-        startDate.setHours(0, 0, 0, 0);
+        startDate.setUTCHours(0, 0, 0, 0);
     }
 
     const query = {
