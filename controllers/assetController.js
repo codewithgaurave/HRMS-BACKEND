@@ -1295,6 +1295,78 @@ export const getIncomingTransfers = async (req, res) => {
   }
 };
 
+// Create Asset and Assign to Team Member (Team Leader)
+export const createAndAssignAsset = async (req, res) => {
+  try {
+    const { name, category, brand, model, serialNumber, condition, employeeId } = req.body;
+
+    if (!name || !category || !employeeId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name, category, and employee ID are required'
+      });
+    }
+
+    // Validate employee is team member
+    if (req.employee.role === 'Team_Leader') {
+      const isTeamMember = await Employee.findOne({
+        _id: employeeId,
+        manager: req.employee._id
+      });
+      
+      if (!isTeamMember) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only assign assets to your team members'
+        });
+      }
+    }
+
+    // Generate Asset ID
+    const assetId = await generateAssetId();
+
+    // Create asset
+    const asset = new Asset({
+      assetId,
+      name,
+      category,
+      brand: brand || '',
+      model: model || '',
+      serialNumber: serialNumber || '',
+      condition: condition || 'Good',
+      status: 'Assigned',
+      createdBy: req.employee._id,
+      updatedBy: req.employee._id,
+      assignedTo: [
+        {
+          employee: employeeId,
+          assignedBy: req.employee._id,
+          assignedDate: new Date(),
+          isActive: true,
+          transferType: 'assign'
+        }
+      ]
+    });
+
+    await asset.save();
+    await asset.populate('assignedTo.employee', 'name employeeId designation department');
+    await asset.populate('assignedTo.assignedBy', 'name employeeId');
+    await asset.populate('createdBy', 'name employeeId');
+
+    res.status(201).json({
+      success: true,
+      message: 'Asset created and assigned successfully',
+      asset
+    });
+  } catch (error) {
+    console.error('Create and Assign Asset Error:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 export default {
   createAsset,
   getAllAssets,
@@ -1313,5 +1385,6 @@ export default {
   employeeTransferAsset,
   acceptAssetTransfer,
   rejectAssetTransfer,
-  getIncomingTransfers
+  getIncomingTransfers,
+  createAndAssignAsset
 };

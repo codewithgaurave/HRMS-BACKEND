@@ -23,7 +23,8 @@ import {
   getColleaguesForTransfer,
   acceptAssetTransfer,
   rejectAssetTransfer,
-  getIncomingTransfers
+  getIncomingTransfers,
+  createAndAssignAsset
 } from '../controllers/assetController.js';
 
 const router = express.Router();
@@ -48,8 +49,9 @@ router.get('/team/hr', getHRTeamAssets);
 router.get('/team/employees', getHRTeamEmployeesForAssets);
 router.post('/:id/assign/team', assignAssetToHRTeam);
 
-// Team Leader specific route
+// Team Leader specific routes
 router.get('/team/leader', requireTeamLeader, getTeamLeaderAssets);
+router.post('/team/create-assign', requireTeamLeader, createAndAssignAsset);
 
 // Categories route
 router.get('/categories', getAssetCategories);
