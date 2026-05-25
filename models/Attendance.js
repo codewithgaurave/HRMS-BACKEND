@@ -194,24 +194,38 @@ attendanceSchema.methods.calculateAttendanceStatus = async function() {
 
   const punchInTime = this.punchIn.timestamp;
 
-  // Scheduled start on the same calendar date as punch-in
-  const scheduledStart = new Date(punchInTime);
-  scheduledStart.setHours(shiftStart.hours, shiftStart.minutes, 0, 0);
+  // Scheduled start: build in IST then convert to UTC
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+  const punchInUTC = new Date(punchInTime);
+  const punchInIST = new Date(punchInUTC.getTime() + IST_OFFSET_MS);
+  const inIstYear = punchInIST.getUTCFullYear();
+  const inIstMonth = punchInIST.getUTCMonth();
+  const inIstDay = punchInIST.getUTCDate();
+  const scheduledStartIST = new Date(Date.UTC(inIstYear, inIstMonth, inIstDay, shiftStart.hours, shiftStart.minutes, 0, 0));
+  const scheduledStartUTC = new Date(scheduledStartIST.getTime() - IST_OFFSET_MS);
 
   // Late minutes
-  const lateMinutes = Math.max(0, (punchInTime - scheduledStart) / (1000 * 60));
+  const lateMinutes = Math.max(0, (punchInUTC - scheduledStartUTC) / (1000 * 60));
 
   // Early departure minutes (only when punched out)
   let earlyDepartureMinutes = 0;
   if (this.punchOut && this.punchOut.timestamp) {
     const punchOutTime = this.punchOut.timestamp;
 
-    // Scheduled end on the same calendar date as punch-out
-    const scheduledEnd = new Date(punchOutTime);
-    scheduledEnd.setHours(shiftEnd.hours, shiftEnd.minutes, 0, 0);
+    // Scheduled end: build on the same UTC date as punch-out, then apply IST offset
+    // Shift times are stored in IST (UTC+5:30 = 330 minutes)
+    const punchOutUTC = new Date(punchOutTime);
+    // Get the IST date for punch-out
+    const punchOutIST = new Date(punchOutUTC.getTime() + IST_OFFSET_MS);
+    const istYear = punchOutIST.getUTCFullYear();
+    const istMonth = punchOutIST.getUTCMonth();
+    const istDay = punchOutIST.getUTCDate();
+    // Build scheduledEnd in IST, then convert to UTC
+    const scheduledEndIST = new Date(Date.UTC(istYear, istMonth, istDay, shiftEnd.hours, shiftEnd.minutes, 0, 0));
+    const scheduledEndUTC = new Date(scheduledEndIST.getTime() - IST_OFFSET_MS);
 
     // Positive value means left before shift end, negative means stayed after (overtime)
-    earlyDepartureMinutes = Math.max(0, (scheduledEnd - punchOutTime) / (1000 * 60));
+    earlyDepartureMinutes = Math.max(0, (scheduledEndUTC - punchOutUTC) / (1000 * 60));
     this.earlyDepartureMinutes = earlyDepartureMinutes;
   }
 
