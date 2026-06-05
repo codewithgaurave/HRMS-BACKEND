@@ -7,7 +7,8 @@ import {
   getPayrollById,
   updatePayroll,
   deletePayroll,
-  generatePayrollForAll
+  generatePayrollForAll,
+  recalculatePayroll
 } from '../controllers/payrollController.js';
 
 const router = express.Router();
@@ -17,6 +18,7 @@ router.use(authenticateToken);
 router.post('/', createPayroll);
 router.get('/team/hr', getHRTeamPayrolls);
 router.post('/generate-all', generatePayrollForAll);
+router.post('/recalculate', recalculatePayroll);
 router.get('/', getAllPayrolls);
 router.get('/:id', getPayrollById);
 router.put('/:id', updatePayroll);

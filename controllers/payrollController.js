@@ -1,5 +1,6 @@
 import Payroll from '../models/Payroll.js';
 import Employee from '../models/Employee.js';
+import Attendance from '../models/Attendance.js';
 
 // Create Payroll
 export const createPayroll = async (req, res) => {
@@ -251,10 +252,38 @@ export const generatePayrollForAll = async (req, res) => {
 
       if (!existingPayroll) {
         const basicSalary = employee.salary || 0;
-        const workingDays = 30; // Default working days
-        const presentDays = workingDays; // Default present days
-        
-        const grossSalary = basicSalary;
+        const workingDays = 30;
+
+        // Fetch actual attendance for this employee for the given month/year
+        const startDate = new Date(Date.UTC(year, month - 1, 1));
+        const endDate = new Date(Date.UTC(year, month, 1));
+
+        const attendanceRecords = await Attendance.find({
+          employee: employee._id,
+          date: { $gte: startDate, $lt: endDate }
+        });
+
+        // Count present days (Present + Late + Early Departure = worked that day)
+        const presentDays = attendanceRecords.filter(a =>
+          ['Present', 'Late', 'Early Departure'].includes(a.status)
+        ).length;
+
+        // Half day = 0.5
+        const halfDays = attendanceRecords.filter(a => a.status === 'Half Day').length;
+        const effectivePresentDays = presentDays + (halfDays * 0.5);
+
+        // Total overtime hours
+        const overtimeHours = attendanceRecords.reduce((sum, a) => sum + (a.overtimeHours || 0), 0);
+
+        // Per day salary
+        const perDaySalary = basicSalary / workingDays;
+
+        // Overtime rate = per hour salary (basicSalary / workingDays / 8) * 1.5
+        const overtimeRate = (basicSalary / workingDays / 8) * 1.5;
+        const overtimeAmount = Math.round(overtimeHours * overtimeRate);
+
+        // Gross = perDay * effectivePresentDays + overtime
+        const grossSalary = Math.round(perDaySalary * effectivePresentDays) + overtimeAmount;
         const netSalary = grossSalary;
 
         const payroll = new Payroll({
@@ -263,7 +292,10 @@ export const generatePayrollForAll = async (req, res) => {
           year,
           basicSalary,
           workingDays,
-          presentDays,
+          presentDays: effectivePresentDays,
+          leaveDays: attendanceRecords.filter(a => a.status === 'On Leave').length,
+          overtimeHours: Math.round(overtimeHours * 100) / 100,
+          overtimeAmount,
           grossSalary,
           netSalary,
           createdBy: req.employee.id
@@ -377,5 +409,75 @@ export default {
   getPayrollById,
   updatePayroll,
   deletePayroll,
-  generatePayrollForAll
+  generatePayrollForAll,
+  recalculatePayroll
+};
+
+// Recalculate existing payroll based on actual attendance
+export const recalculatePayroll = async (req, res) => {
+  try {
+    const { month, year } = req.body;
+
+    let employees = [];
+    if (req.employee.role === 'HR_Manager') {
+      employees = await Employee.find({ addedBy: req.employee._id, isActive: true });
+      const hr = await Employee.findById(req.employee._id);
+      if (hr) employees.push(hr);
+    } else if (req.employee.role === 'Team_Leader') {
+      employees = await Employee.find({ manager: req.employee._id, isActive: true });
+      const tl = await Employee.findById(req.employee._id);
+      if (tl) employees.push(tl);
+    } else {
+      return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
+
+    const workingDays = 30;
+    const startDate = new Date(Date.UTC(year, month - 1, 1));
+    const endDate = new Date(Date.UTC(year, month, 1));
+    let updated = 0;
+
+    for (const employee of employees) {
+      const existingPayroll = await Payroll.findOne({ employee: employee._id, month, year });
+      if (!existingPayroll) continue;
+
+      const attendanceRecords = await Attendance.find({
+        employee: employee._id,
+        date: { $gte: startDate, $lt: endDate }
+      });
+
+      const presentDays = attendanceRecords.filter(a =>
+        ['Present', 'Late', 'Early Departure'].includes(a.status)
+      ).length;
+      const halfDays = attendanceRecords.filter(a => a.status === 'Half Day').length;
+      const effectivePresentDays = presentDays + (halfDays * 0.5);
+      const leaveDays = attendanceRecords.filter(a => a.status === 'On Leave').length;
+      const overtimeHours = attendanceRecords.reduce((sum, a) => sum + (a.overtimeHours || 0), 0);
+
+      const basicSalary = employee.salary || existingPayroll.basicSalary || 0;
+      const perDaySalary = basicSalary / workingDays;
+      const overtimeRate = (basicSalary / workingDays / 8) * 1.5;
+      const overtimeAmount = Math.round(overtimeHours * overtimeRate);
+      const grossSalary = Math.round(perDaySalary * effectivePresentDays) + overtimeAmount;
+
+      await Payroll.updateOne(
+        { _id: existingPayroll._id },
+        {
+          $set: {
+            workingDays,
+            presentDays: effectivePresentDays,
+            leaveDays,
+            overtimeHours: Math.round(overtimeHours * 100) / 100,
+            overtimeAmount,
+            grossSalary,
+            netSalary: grossSalary
+          }
+        }
+      );
+      updated++;
+    }
+
+    res.json({ success: true, message: `Recalculated payroll for ${updated} employees`, count: updated });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
