@@ -8,8 +8,9 @@ const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 async function getAttendanceForMonth(employeeId, month, year) {
   const m = parseInt(month);
   const y = parseInt(year);
-  const startUTC = new Date(Date.UTC(y, m - 1, 1) - IST_OFFSET_MS);
-  const endUTC = new Date(Date.UTC(y, m, 1) + IST_OFFSET_MS);
+  // Wide range: full month in UTC covering IST offset (±1 day buffer)
+  const startUTC = new Date(Date.UTC(y, m - 1, 1) - IST_OFFSET_MS - 86400000);
+  const endUTC = new Date(Date.UTC(y, m, 1) + IST_OFFSET_MS + 86400000);
   const allRecords = await Attendance.find({
     employee: employeeId,
     date: { $gte: startUTC, $lte: endUTC }
@@ -150,10 +151,14 @@ export const generatePayrollForAll = async (req, res) => {
 
     for (const employee of employees) {
       const existingPayroll = await Payroll.findOne({ employee: employee._id, month: m, year: y });
-      if (existingPayroll) continue;
+      if (existingPayroll) {
+        console.log(`⏭️ Payroll already exists for ${employee.employeeId} - ${m}/${y}`);
+        continue;
+      }
 
       const basicSalary = employee.salary || 0;
       const attendanceRecords = await getAttendanceForMonth(employee._id, m, y);
+      console.log(`📋 ${employee.employeeId}: found ${attendanceRecords.length} attendance records for ${m}/${y}`);
 
       const presentDays = attendanceRecords.filter(a => ['Present', 'Late', 'Early Departure'].includes(a.status)).length;
       const halfDays = attendanceRecords.filter(a => a.status === 'Half Day').length;
@@ -178,7 +183,7 @@ export const generatePayrollForAll = async (req, res) => {
       payrolls.push(payroll);
     }
 
-    res.json({ success: true, message: `Generated payroll for ${payrolls.length} employees`, count: payrolls.length });
+    res.json({ success: true, message: `Generated payroll for ${payrolls.length} employees`, count: payrolls.length, skipped: employees.length - payrolls.length });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
