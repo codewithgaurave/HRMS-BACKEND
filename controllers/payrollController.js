@@ -2,6 +2,22 @@ import Payroll from '../models/Payroll.js';
 import Employee from '../models/Employee.js';
 import Attendance from '../models/Attendance.js';
 
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+// Handles mixed UTC date formats in DB by fetching wide range then filtering by IST month
+async function getAttendanceForMonth(employeeId, month, year) {
+  const startUTC = new Date(Date.UTC(year, month - 1, 1) - IST_OFFSET_MS);
+  const endUTC = new Date(Date.UTC(year, month, 1) + IST_OFFSET_MS);
+  const allRecords = await Attendance.find({
+    employee: employeeId,
+    date: { $gte: startUTC, $lte: endUTC }
+  }).select('date status overtimeHours totalWorkHours');
+  return allRecords.filter(r => {
+    const istDate = new Date(r.date.getTime() + IST_OFFSET_MS);
+    return istDate.getUTCMonth() + 1 === month && istDate.getUTCFullYear() === year;
+  });
+}
+
 // Create Payroll
 export const createPayroll = async (req, res) => {
   try {
@@ -66,8 +82,8 @@ export const getAllPayrolls = async (req, res) => {
     console.log('Payroll Query:', JSON.stringify(query, null, 2));
     
     // Additional filters (only apply if employee filter is already set)
-    if (month) query.month = month;
-    if (year) query.year = year;
+    if (month) query.month = parseInt(month);
+    if (year) query.year = parseInt(year);
     if (status) query.status = status;
     if (employeeId && query.employee) {
       // Only allow if the requested employee is in the allowed list
@@ -254,14 +270,7 @@ export const generatePayrollForAll = async (req, res) => {
         const basicSalary = employee.salary || 0;
         const workingDays = 30;
 
-        // Fetch actual attendance for this employee for the given month/year
-        const startDate = new Date(Date.UTC(year, month - 1, 1));
-        const endDate = new Date(Date.UTC(year, month, 1));
-
-        const attendanceRecords = await Attendance.find({
-          employee: employee._id,
-          date: { $gte: startDate, $lt: endDate }
-        });
+        const attendanceRecords = await getAttendanceForMonth(employee._id, month, year);
 
         // Count present days (Present + Late + Early Departure = worked that day)
         const presentDays = attendanceRecords.filter(a =>
@@ -358,8 +367,8 @@ export const getHRTeamPayrolls = async (req, res) => {
     };
     
     // Additional filters
-    if (month) query.month = month;
-    if (year) query.year = year;
+    if (month) query.month = parseInt(month);
+    if (year) query.year = parseInt(year);
     if (status) query.status = status;
 
     console.log('Final Payroll Query:', JSON.stringify(query, null, 2));
@@ -432,18 +441,13 @@ export const recalculatePayroll = async (req, res) => {
     }
 
     const workingDays = 30;
-    const startDate = new Date(Date.UTC(year, month - 1, 1));
-    const endDate = new Date(Date.UTC(year, month, 1));
     let updated = 0;
 
     for (const employee of employees) {
       const existingPayroll = await Payroll.findOne({ employee: employee._id, month, year });
       if (!existingPayroll) continue;
 
-      const attendanceRecords = await Attendance.find({
-        employee: employee._id,
-        date: { $gte: startDate, $lt: endDate }
-      });
+      const attendanceRecords = await getAttendanceForMonth(employee._id, month, year);
 
       const presentDays = attendanceRecords.filter(a =>
         ['Present', 'Late', 'Early Departure'].includes(a.status)
