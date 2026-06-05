@@ -8,17 +8,32 @@ const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 async function getAttendanceForMonth(employeeId, month, year) {
   const m = parseInt(month);
   const y = parseInt(year);
-  // Wide range: full month in UTC covering IST offset (±1 day buffer)
-  const startUTC = new Date(Date.UTC(y, m - 1, 1) - IST_OFFSET_MS - 86400000);
-  const endUTC = new Date(Date.UTC(y, m, 1) + IST_OFFSET_MS + 86400000);
-  const allRecords = await Attendance.find({
+  // Query with full UTC range covering the entire month + IST buffer
+  // Attendance dates stored as midnight UTC (e.g., 2025-05-01T00:00:00Z)
+  const startUTC = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0));
+  const endUTC = new Date(Date.UTC(y, m, 1, 0, 0, 0, 0)); // exclusive
+  
+  const records = await Attendance.find({
     employee: employeeId,
-    date: { $gte: startUTC, $lte: endUTC }
+    date: { $gte: startUTC, $lt: endUTC }
   }).select('date status overtimeHours totalWorkHours');
-  return allRecords.filter(r => {
-    const istDate = new Date(r.date.getTime() + IST_OFFSET_MS);
-    return istDate.getUTCMonth() + 1 === m && istDate.getUTCFullYear() === y;
-  });
+
+  // If no records found with UTC midnight, try IST-based range as fallback
+  if (records.length === 0) {
+    const startIST = new Date(Date.UTC(y, m - 1, 1) - IST_OFFSET_MS);
+    const endIST = new Date(Date.UTC(y, m, 1) + IST_OFFSET_MS);
+    const istRecords = await Attendance.find({
+      employee: employeeId,
+      date: { $gte: startIST, $lt: endIST }
+    }).select('date status overtimeHours totalWorkHours');
+    
+    return istRecords.filter(r => {
+      const d = new Date(r.date.getTime() + IST_OFFSET_MS);
+      return d.getUTCMonth() + 1 === m && d.getUTCFullYear() === y;
+    });
+  }
+
+  return records;
 }
 
 // Create Payroll
