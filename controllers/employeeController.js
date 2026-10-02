@@ -654,6 +654,46 @@ export const toggleEmployeeStatus = async (req, res) => {
   }
 };
 
+// Reset Employee Password - HR only
+export const resetEmployeePassword = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    if (!newPassword || newPassword.trim().length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password is required and must be at least 6 characters long.'
+      });
+    }
+
+    const employee = await Employee.findById(id);
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: 'Employee not found.'
+      });
+    }
+
+    // Encrypt new password
+    const encryptedPassword = encryptPassword(newPassword.trim());
+    employee.password = encryptedPassword;
+    await employee.save();
+
+    res.json({
+      success: true,
+      message: `Password for ${employee.name?.first || 'employee'} ${employee.name?.last || ''} has been reset successfully.`
+    });
+  } catch (error) {
+    console.error('Reset Password Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error resetting employee password.',
+      error: error.message
+    });
+  }
+};
+
 // Get team members (for Team Leaders)
 export const getTeamMembers = async (req, res) => {
   try {

@@ -30,7 +30,8 @@ import {
   updatePersonalInfo,
   updateEmployeeCoordinates,
   getEmployeeFormData,
-  getAllColleagues
+  getAllColleagues,
+  resetEmployeePassword
 } from '../controllers/employeeController.js';
 import {
   authenticateToken,
@@ -66,6 +67,7 @@ router.get('/:id', authenticateToken, getEmployeeById);
 router.put('/:id', authenticateToken, updateEmployee);
 
 // HR Manager only routes
+router.patch('/:id/reset-password', authenticateToken, requireHRManager, resetEmployeePassword);
 router.patch('/:id/toggle-status', authenticateToken, requireHRManager, toggleEmployeeStatus);
 router.patch('/bulk-status', authenticateToken, requireHRManager, bulkUpdateStatus);
 

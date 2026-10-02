@@ -51,41 +51,148 @@ export const createTask = async (req, res) => {
   }
 };
 
-// 📌 Get All Tasks — Team Leader sees only tasks they created
+// 📌 Get All Tasks — HR sees all or filtered by TL; Team Leader sees only tasks they created
 export const getAllTasks = async (req, res) => {
   try {
-    const { search, status, priority, assignedTo, deadlineStatus, sortBy = "createdAt", sortOrder = "desc", isActive } = req.query;
+    const {
+      search,
+      status,
+      priority,
+      assignedTo,
+      assignedBy,
+      taskType,
+      deadlineStatus,
+      period,
+      date,
+      month,
+      year,
+      startDate,
+      endDate,
+      dateField = "createdAt",
+      sortBy = "createdAt",
+      sortOrder = "desc",
+      isActive,
+    } = req.query;
+
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
 
     const filter = {};
 
-    // Team Leader sees only tasks they assigned
+    // Team Leader sees only tasks they assigned; HR can filter by assignedBy or see all
     if (req.employee.role === 'Team_Leader') {
       filter.assignedBy = req.employee._id;
+    } else if (assignedBy) {
+      filter.assignedBy = assignedBy;
     }
 
     if (isActive === "true") filter.isActive = true;
     else if (isActive === "false") filter.isActive = false;
     else filter.isActive = true;
-    if (search) filter.$or = [{ title: { $regex: search, $options: "i" } }, { description: { $regex: search, $options: "i" } }];
+
+    if (assignedTo) filter.assignedTo = assignedTo;
+    if (taskType) filter.taskType = taskType;
     if (status) filter.status = status;
     if (priority) filter.priority = priority;
-    if (assignedTo) filter.assignedTo = assignedTo;
 
+    // Search by title, description, or assigned/assignee employee name/ID
+    if (search && search.trim()) {
+      const searchRegex = { $regex: search.trim(), $options: "i" };
+      const matchingEmployees = await Employee.find({
+        $or: [
+          { "name.first": searchRegex },
+          { "name.last": searchRegex },
+          { employeeId: searchRegex },
+          { email: searchRegex }
+        ]
+      }).select('_id');
+      const matchedIds = matchingEmployees.map(e => e._id);
+
+      filter.$or = [
+        { title: searchRegex },
+        { description: searchRegex },
+        ...(matchedIds.length > 0 ? [
+          { assignedTo: { $in: matchedIds } },
+          { assignedBy: { $in: matchedIds } }
+        ] : [])
+      ];
+    }
+
+    // Deadline status filter
     if (deadlineStatus) {
       const now = new Date();
       switch (deadlineStatus) {
-        case 'overdue': filter.deadline = { $lt: now }; filter.status = { $nin: ['Completed', 'Approved'] }; break;
-        case 'urgent': const t = new Date(now); t.setDate(t.getDate()+1); filter.deadline = { $gte: now, $lte: t }; filter.status = { $nin: ['Completed', 'Approved'] }; break;
-        case 'approaching': const td = new Date(now); td.setDate(td.getDate()+3); filter.deadline = { $gte: now, $lte: td }; filter.status = { $nin: ['Completed', 'Approved'] }; break;
-        case 'completed': filter.status = { $in: ['Completed', 'Approved'] }; break;
+        case 'overdue':
+          filter.deadline = { $lt: now };
+          filter.status = { $nin: ['Completed', 'Approved'] };
+          break;
+        case 'urgent':
+          const t = new Date(now);
+          t.setDate(t.getDate() + 1);
+          filter.deadline = { $gte: now, $lte: t };
+          filter.status = { $nin: ['Completed', 'Approved'] };
+          break;
+        case 'approaching':
+          const td = new Date(now);
+          td.setDate(td.getDate() + 3);
+          filter.deadline = { $gte: now, $lte: td };
+          filter.status = { $nin: ['Completed', 'Approved'] };
+          break;
+        case 'completed':
+          filter.status = { $in: ['Completed', 'Approved'] };
+          break;
+      }
+    }
+
+    // Date filters (Daily / Monthly / Custom Range)
+    const targetDateField = ['createdAt', 'deadline', 'dueDate'].includes(dateField) ? dateField : 'createdAt';
+
+    if (period === 'daily' && date) {
+      const d = new Date(date);
+      if (!isNaN(d.getTime())) {
+        const startOfDay = new Date(d);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(d);
+        endOfDay.setHours(23, 59, 59, 999);
+        filter[targetDateField] = { $gte: startOfDay, $lte: endOfDay };
+      }
+    } else if (period === 'monthly' && (month || year)) {
+      let y = parseInt(year) || new Date().getFullYear();
+      let m = parseInt(month) || (new Date().getMonth() + 1);
+      if (typeof month === 'string' && month.includes('-')) {
+        const parts = month.split('-');
+        y = parseInt(parts[0]);
+        m = parseInt(parts[1]);
+      }
+      if (m >= 1 && m <= 12) {
+        const startOfMonth = new Date(y, m - 1, 1, 0, 0, 0, 0);
+        const endOfMonth = new Date(y, m, 0, 23, 59, 59, 999);
+        filter[targetDateField] = { $gte: startOfMonth, $lte: endOfMonth };
+      }
+    } else if (startDate || endDate) {
+      const dateRange = {};
+      if (startDate) {
+        const s = new Date(startDate);
+        if (!isNaN(s.getTime())) {
+          s.setHours(0, 0, 0, 0);
+          dateRange.$gte = s;
+        }
+      }
+      if (endDate) {
+        const e = new Date(endDate);
+        if (!isNaN(e.getTime())) {
+          e.setHours(23, 59, 59, 999);
+          dateRange.$lte = e;
+        }
+      }
+      if (Object.keys(dateRange).length > 0) {
+        filter[targetDateField] = dateRange;
       }
     }
 
     const tasks = await Task.find(filter)
-      .populate("assignedBy", "name email employeeId")
-      .populate("assignedTo", "name email employeeId")
+      .populate("assignedBy", "name email employeeId role designation")
+      .populate("assignedTo", "name email employeeId designation department")
       .populate("taskType", "name")
       .populate("taskHistory.updatedBy", "name email employeeId")
       .sort({ [sortBy]: sortOrder === "desc" ? -1 : 1 })
@@ -94,7 +201,16 @@ export const getAllTasks = async (req, res) => {
 
     const total = await Task.countDocuments(filter);
 
-    res.json({ success: true, tasks, pagination: { currentPage: page, totalPages: Math.ceil(total / limit), totalTasks: total, limit } });
+    res.json({
+      success: true,
+      tasks,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(total / limit) || 1,
+        totalTasks: total,
+        limit
+      }
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -480,35 +596,96 @@ export const restoreTask = async (req, res) => {
   }
 };
 
-// 📌 Get Task Statistics
+// 📌 Get Task Statistics (HR / Team Leader / Employee)
 export const getTaskStats = async (req, res) => {
   try {
-    const totalTasks = await Task.countDocuments({ isActive: true });
+    const { assignedBy, assignedTo, period, date, month, year, startDate, endDate, dateField = "createdAt" } = req.query;
+
+    const baseFilter = { isActive: true };
+
+    if (req.employee.role === 'Team_Leader') {
+      baseFilter.assignedBy = req.employee._id;
+    } else if (assignedBy) {
+      baseFilter.assignedBy = assignedBy;
+    }
+
+    if (assignedTo) {
+      baseFilter.assignedTo = assignedTo;
+    }
+
+    // Target Date Field
+    const targetDateField = ['createdAt', 'deadline', 'dueDate'].includes(dateField) ? dateField : 'createdAt';
+
+    // Apply period/date filters if provided
+    if (period === 'daily' && date) {
+      const d = new Date(date);
+      if (!isNaN(d.getTime())) {
+        const startOfDay = new Date(d);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(d);
+        endOfDay.setHours(23, 59, 59, 999);
+        baseFilter[targetDateField] = { $gte: startOfDay, $lte: endOfDay };
+      }
+    } else if (period === 'monthly' && (month || year)) {
+      let y = parseInt(year) || new Date().getFullYear();
+      let m = parseInt(month) || (new Date().getMonth() + 1);
+      if (typeof month === 'string' && month.includes('-')) {
+        const parts = month.split('-');
+        y = parseInt(parts[0]);
+        m = parseInt(parts[1]);
+      }
+      if (m >= 1 && m <= 12) {
+        const startOfMonth = new Date(y, m - 1, 1, 0, 0, 0, 0);
+        const endOfMonth = new Date(y, m, 0, 23, 59, 59, 999);
+        baseFilter[targetDateField] = { $gte: startOfMonth, $lte: endOfMonth };
+      }
+    } else if (startDate || endDate) {
+      const dateRange = {};
+      if (startDate) {
+        const s = new Date(startDate);
+        if (!isNaN(s.getTime())) {
+          s.setHours(0, 0, 0, 0);
+          dateRange.$gte = s;
+        }
+      }
+      if (endDate) {
+        const e = new Date(endDate);
+        if (!isNaN(e.getTime())) {
+          e.setHours(23, 59, 59, 999);
+          dateRange.$lte = e;
+        }
+      }
+      if (Object.keys(dateRange).length > 0) {
+        baseFilter[targetDateField] = dateRange;
+      }
+    }
+
+    const totalTasks = await Task.countDocuments(baseFilter);
     const myTasks = await Task.countDocuments({ 
       assignedTo: req.employee._id, 
       isActive: true 
     });
     
     const statusStats = await Task.aggregate([
-      { $match: { isActive: true } },
+      { $match: baseFilter },
       { $group: { _id: '$status', count: { $sum: 1 } } }
     ]);
 
     const priorityStats = await Task.aggregate([
-      { $match: { isActive: true } },
+      { $match: baseFilter },
       { $group: { _id: '$priority', count: { $sum: 1 } } }
     ]);
 
-    // Deadline statistics
+    // Deadline statistics based on current filter
     const now = new Date();
     const overdueTasks = await Task.countDocuments({
-      isActive: true,
+      ...baseFilter,
       deadline: { $lt: now },
       status: { $nin: ['Completed', 'Approved'] }
     });
 
     const urgentTasks = await Task.countDocuments({
-      isActive: true,
+      ...baseFilter,
       deadline: { 
         $gte: now, 
         $lte: new Date(now.getTime() + 24 * 60 * 60 * 1000)
@@ -517,13 +694,78 @@ export const getTaskStats = async (req, res) => {
     });
 
     const approachingTasks = await Task.countDocuments({
-      isActive: true,
+      ...baseFilter,
       deadline: { 
         $gte: new Date(now.getTime() + 24 * 60 * 60 * 1000), 
         $lte: new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
       },
       status: { $nin: ['Completed', 'Approved'] }
     });
+
+    // Today's tasks count
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const todayTasks = await Task.countDocuments({
+      isActive: true,
+      ...(req.employee.role === 'Team_Leader' ? { assignedBy: req.employee._id } : (assignedBy ? { assignedBy } : {})),
+      createdAt: { $gte: startOfToday, $lte: endOfToday }
+    });
+
+    // This month's tasks count
+    const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    const endOfThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const thisMonthTasks = await Task.countDocuments({
+      isActive: true,
+      ...(req.employee.role === 'Team_Leader' ? { assignedBy: req.employee._id } : (assignedBy ? { assignedBy } : {})),
+      createdAt: { $gte: startOfThisMonth, $lte: endOfThisMonth }
+    });
+
+    // Team Leader breakdown (for HR)
+    let teamLeaderStats = [];
+    if (req.employee.role === 'HR_Manager') {
+      teamLeaderStats = await Task.aggregate([
+        { $match: { isActive: true } },
+        {
+          $group: {
+            _id: '$assignedBy',
+            totalTasks: { $sum: 1 },
+            completedTasks: {
+              $sum: { $cond: [{ $in: ['$status', ['Completed', 'Approved']] }, 1, 0] }
+            },
+            inProgressTasks: {
+              $sum: { $cond: [{ $eq: ['$status', 'In Progress'] }, 1, 0] }
+            },
+            pendingTasks: {
+              $sum: { $cond: [{ $in: ['$status', ['Pending', 'Assigned', 'New']] }, 1, 0] }
+            }
+          }
+        },
+        {
+          $lookup: {
+            from: 'employees',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'teamLeader'
+          }
+        },
+        { $unwind: { path: '$teamLeader', preserveNullAndEmptyArrays: true } },
+        {
+          $project: {
+            _id: 1,
+            totalTasks: 1,
+            completedTasks: 1,
+            inProgressTasks: 1,
+            pendingTasks: 1,
+            name: '$teamLeader.name',
+            email: '$teamLeader.email',
+            employeeId: '$teamLeader.employeeId'
+          }
+        },
+        { $sort: { totalTasks: -1 } }
+      ]);
+    }
 
     res.json({
       success: true,
@@ -533,8 +775,11 @@ export const getTaskStats = async (req, res) => {
         overdueTasks,
         urgentTasks,
         approachingTasks,
+        todayTasks,
+        thisMonthTasks,
         statusStats,
-        priorityStats
+        priorityStats,
+        teamLeaderStats
       }
     });
   } catch (error) {
@@ -542,22 +787,29 @@ export const getTaskStats = async (req, res) => {
   }
 };
 
-// 📌 Get Assignable Employees — Team Leader sees only their team members
+// 📌 Get Assignable Employees — Team Leader sees only their team members; HR sees all employees & team leaders
 export const getAssignableEmployees = async (req, res) => {
   try {
     let employees;
+    let teamLeaders = [];
     if (req.employee.role === 'Team_Leader') {
       employees = await Employee.find({ manager: req.employee._id, isActive: true })
-        .select('name email employeeId designation department')
+        .select('name email employeeId designation department role')
         .populate('designation', 'title')
         .populate('department', 'name');
     } else {
       employees = await Employee.find({ isActive: true, role: { $in: ['Employee', 'Team_Leader'] } })
+        .select('name email employeeId designation department role manager')
+        .populate('designation', 'title')
+        .populate('department', 'name')
+        .populate('manager', 'name employeeId');
+
+      teamLeaders = await Employee.find({ isActive: true, role: 'Team_Leader' })
         .select('name email employeeId designation department')
         .populate('designation', 'title')
         .populate('department', 'name');
     }
-    res.json({ success: true, employees });
+    res.json({ success: true, employees, teamLeaders });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
