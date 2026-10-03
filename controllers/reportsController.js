@@ -3,6 +3,7 @@ import Payroll from '../models/Payroll.js';
 import Asset from '../models/Asset.js';
 import Leave from '../models/Leave.js';
 import Attendance from '../models/Attendance.js';
+import Task from '../models/Task.js';
 import mongoose from 'mongoose';
 
 // Employee Reports
@@ -314,9 +315,110 @@ export const getAttendanceReports = async (req, res) => {
     const totalPresent = monthlyStats.reduce((s, m) => s + m.present + m.late, 0);
     const averageAttendance = totalDays > 0 ? ((totalPresent / totalDays) * 100).toFixed(1) : 0;
 
+    // Daily Attendance Records (with Check-in, Check-out, Location, Shift)
+    const dailyAttendance = await Attendance.find(baseMatch)
+      .populate({
+        path: 'employee',
+        select: 'employeeId name email role department',
+        populate: { path: 'department', select: 'name' }
+      })
+      .populate('shift', 'name startTime endTime')
+      .populate('officeLocation', 'officeName')
+      .sort({ date: -1, 'punchIn.timestamp': -1 });
+
+    // Task Date Match for period
+    let taskDateFilter = {};
+    if (year && month) {
+      const y = parseInt(year), m2 = parseInt(month);
+      const nextMonth = m2 === 12 ? 1 : m2 + 1;
+      const nextYear = m2 === 12 ? y + 1 : y;
+      const start = new Date(`${y}-${String(m2).padStart(2,'0')}-01T00:00:00.000Z`);
+      const end = new Date(`${nextYear}-${String(nextMonth).padStart(2,'0')}-01T00:00:00.000Z`);
+      taskDateFilter = {
+        $or: [
+          { createdAt: { $gte: start, $lt: end } },
+          { deadline: { $gte: start, $lt: end } },
+          { dueDate: { $gte: start, $lt: end } },
+          { updatedAt: { $gte: start, $lt: end } }
+        ]
+      };
+    } else if (year) {
+      const start = new Date(`${year}-01-01T00:00:00.000Z`);
+      const end = new Date(`${parseInt(year)+1}-01-01T00:00:00.000Z`);
+      taskDateFilter = {
+        $or: [
+          { createdAt: { $gte: start, $lt: end } },
+          { deadline: { $gte: start, $lt: end } },
+          { dueDate: { $gte: start, $lt: end } },
+          { updatedAt: { $gte: start, $lt: end } }
+        ]
+      };
+    }
+
+    const employeeTasks = await Task.find({
+      assignedTo: { $in: teamMemberIds },
+      ...taskDateFilter
+    })
+      .populate({
+        path: 'assignedTo',
+        select: 'employeeId name email role department',
+        populate: { path: 'department', select: 'name' }
+      })
+      .populate('assignedBy', 'employeeId name')
+      .populate('taskType', 'name')
+      .sort({ createdAt: -1 });
+
+    // Employee Assets
+    const assets = await Asset.find({ 'assignedTo.employee': { $in: teamMemberIds } })
+      .populate({
+        path: 'assignedTo.employee',
+        select: 'employeeId name email role department',
+        populate: { path: 'department', select: 'name' }
+      })
+      .populate('assignedTo.assignedBy', 'employeeId name')
+      .sort({ createdAt: -1 });
+
+    const employeeAssets = [];
+    assets.forEach(asset => {
+      (asset.assignedTo || []).forEach(assignment => {
+        if (!assignment.employee) return;
+        const empIdStr = assignment.employee._id?.toString() || assignment.employee.toString();
+        const isMember = teamMemberIds.some(id => id.toString() === empIdStr);
+        if (isMember) {
+          employeeAssets.push({
+            assetId: asset.assetId,
+            name: asset.name,
+            category: asset.category,
+            brand: asset.brand || '',
+            model: asset.model || '',
+            serialNumber: asset.serialNumber || '',
+            condition: asset.condition || '',
+            employee: assignment.employee,
+            assignedBy: assignment.assignedBy,
+            assignedDate: assignment.assignedDate,
+            returnDate: assignment.returnDate || null,
+            isActive: assignment.isActive,
+            transferType: assignment.transferType || 'assign',
+            status: assignment.isActive ? 'Active' : 'Returned'
+          });
+        }
+      });
+    });
+    employeeAssets.sort((a, b) => new Date(b.assignedDate || 0) - new Date(a.assignedDate || 0));
+
     res.json({
       success: true,
-      data: { todayAttendance, lateToday, monthlyStats, employeeStats, averageAttendance, teamSize: teamMemberIds.length }
+      data: {
+        todayAttendance,
+        lateToday,
+        monthlyStats,
+        employeeStats,
+        dailyAttendance,
+        employeeTasks,
+        employeeAssets,
+        averageAttendance,
+        teamSize: teamMemberIds.length
+      }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
